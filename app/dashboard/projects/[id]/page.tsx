@@ -2,8 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { getProjectById, updateProject, getCustomers, getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial, getStepsByProjectId, addStep, updateStep, deleteStep, reorderSteps, getStepLibrary, addStepToLibrary, getQuoteByProjectId } from '@/lib/api/supabase-client'
-import type { Project, Customer, MaterialItem, ProductionStep, StepLibraryItem, Quote, ProjectStatus, ProjectType } from '@/lib/core/types'
+import Link from 'next/link'
+import {
+  getProjectById, updateProject, getCustomers,
+  getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial,
+  getStepsByProjectId, addStep, updateStep, deleteStep,
+  getStepLibrary, addStepToLibrary,
+  getQuoteByProjectId,
+  getNotesByProjectId, addDesignMeetingNote, deleteNote,
+} from '@/lib/api/supabase-client'
+import type {
+  Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
+  Quote, ProjectStatus, ProjectType, DesignMeetingNote,
+} from '@/lib/core/types'
 
 const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
 const STATUSES: ProjectStatus[] = ['lead', 'design_meeting_scheduled', 'rendering', 'quote_issued', 'deposit_received', 'in_production', 'completed']
@@ -18,6 +29,12 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   completed: 'Completed',
 }
 
+const QUOTE_STATUS_COLORS = {
+  initial: 'bg-gray-700 text-gray-200',
+  revised: 'bg-blue-900 text-blue-200',
+  final: 'bg-emerald-900 text-emerald-200',
+}
+
 type Tab = 'overview' | 'materials' | 'steps' | 'quote'
 
 export default function ProjectDetailPage() {
@@ -29,6 +46,7 @@ export default function ProjectDetailPage() {
   const [steps, setSteps] = useState<ProductionStep[]>([])
   const [stepLibrary, setStepLibrary] = useState<StepLibraryItem[]>([])
   const [quote, setQuote] = useState<Quote | null>(null)
+  const [designNotes, setDesignNotes] = useState<DesignMeetingNote[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -54,15 +72,20 @@ export default function ProjectDetailPage() {
   const [addingStep, setAddingStep] = useState(false)
   const [saveToLibraryPrompt, setSaveToLibraryPrompt] = useState<string | null>(null)
 
+  // Design note form state
+  const [newNote, setNewNote] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
+
   useEffect(() => {
     async function load() {
-      const [p, c, m, s, sl, q] = await Promise.all([
+      const [p, c, m, s, sl, q, dn] = await Promise.all([
         getProjectById(id),
         getCustomers(),
         getMaterialsByProjectId(id),
         getStepsByProjectId(id),
         getStepLibrary(),
         getQuoteByProjectId(id),
+        getNotesByProjectId(id),
       ])
       if (p) {
         setProject(p)
@@ -77,6 +100,7 @@ export default function ProjectDetailPage() {
       setSteps(s)
       setStepLibrary(sl)
       setQuote(q)
+      setDesignNotes(dn)
     }
     load().catch(console.error).finally(() => setLoading(false))
   }, [id])
@@ -175,6 +199,24 @@ export default function ProjectDetailPage() {
   async function handleDeleteStep(stepId: string) {
     await deleteStep(stepId)
     setSteps(prev => prev.filter(s => s.id !== stepId))
+  }
+
+  async function handleAddNote(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newNote.trim()) return
+    setAddingNote(true)
+    try {
+      const n = await addDesignMeetingNote(id, newNote.trim())
+      setDesignNotes(prev => [n, ...prev])
+      setNewNote('')
+    } finally {
+      setAddingNote(false)
+    }
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    await deleteNote(noteId)
+    setDesignNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
   const missingFields = project
@@ -324,29 +366,14 @@ export default function ProjectDetailPage() {
                         {mat.cost_estimate != null ? `$${mat.cost_estimate.toFixed(2)}` : '—'}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={mat.ordered}
-                          onChange={() => toggleMaterial(mat, 'ordered')}
-                          className="accent-amber-500 w-4 h-4"
-                        />
+                        <input type="checkbox" checked={mat.ordered} onChange={() => toggleMaterial(mat, 'ordered')} className="accent-amber-500 w-4 h-4" />
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={mat.received}
-                          onChange={() => toggleMaterial(mat, 'received')}
-                          className="accent-amber-500 w-4 h-4"
-                        />
+                        <input type="checkbox" checked={mat.received} onChange={() => toggleMaterial(mat, 'received')} className="accent-amber-500 w-4 h-4" />
                       </td>
                       <td className="px-4 py-3 text-gray-400">{mat.notes ?? '—'}</td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleDeleteMaterial(mat.id)}
-                          className="text-red-400 hover:text-red-300 text-xs"
-                        >
-                          Delete
-                        </button>
+                        <button onClick={() => handleDeleteMaterial(mat.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -358,34 +385,15 @@ export default function ProjectDetailPage() {
           <form onSubmit={handleAddMaterial} className="bg-gray-900 rounded-xl border border-gray-800 p-4">
             <h3 className="text-sm font-medium text-gray-300 mb-3">Add Material</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <input
-                type="text"
-                placeholder="Item name *"
-                value={newItemName}
-                onChange={e => setNewItemName(e.target.value)}
-                required
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-              <input
-                type="number"
-                placeholder="Cost estimate"
-                value={newItemCost}
-                onChange={e => setNewItemCost(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-              <input
-                type="text"
-                placeholder="Notes"
-                value={newItemNotes}
-                onChange={e => setNewItemNotes(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
+              <input type="text" placeholder="Item name *" value={newItemName} onChange={e => setNewItemName(e.target.value)} required
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+              <input type="number" placeholder="Cost estimate" value={newItemCost} onChange={e => setNewItemCost(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+              <input type="text" placeholder="Notes" value={newItemNotes} onChange={e => setNewItemNotes(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
             </div>
-            <button
-              type="submit"
-              disabled={addingMaterial || !newItemName}
-              className="mt-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
-            >
+            <button type="submit" disabled={addingMaterial || !newItemName}
+              className="mt-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
               {addingMaterial ? 'Adding...' : 'Add Material'}
             </button>
           </form>
@@ -413,37 +421,17 @@ export default function ProjectDetailPage() {
                 <div key={step.id} className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
                   <div className="flex items-center gap-3">
                     <span className="text-gray-500 text-sm w-5 shrink-0">{idx + 1}</span>
-                    <input
-                      type="checkbox"
-                      checked={step.completed}
-                      onChange={() => toggleStep(step)}
-                      className="accent-amber-500 w-4 h-4 shrink-0"
-                    />
-                    <span className={`flex-1 text-sm ${step.completed ? 'line-through text-gray-500' : 'text-white'}`}>
-                      {step.step_name}
-                    </span>
-                    <input
-                      type="text"
-                      defaultValue={step.assigned_to ?? ''}
-                      onBlur={e => updateStepField(step, 'assigned_to', e.target.value)}
+                    <input type="checkbox" checked={step.completed} onChange={() => toggleStep(step)} className="accent-amber-500 w-4 h-4 shrink-0" />
+                    <span className={`flex-1 text-sm ${step.completed ? 'line-through text-gray-500' : 'text-white'}`}>{step.step_name}</span>
+                    <input type="text" defaultValue={step.assigned_to ?? ''} onBlur={e => updateStepField(step, 'assigned_to', e.target.value)}
                       placeholder="Assigned to"
-                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
-                    <button
-                      onClick={() => handleDeleteStep(step.id)}
-                      className="text-red-400 hover:text-red-300 text-xs shrink-0"
-                    >
-                      Delete
-                    </button>
+                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28 focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                    <button onClick={() => handleDeleteStep(step.id)} className="text-red-400 hover:text-red-300 text-xs shrink-0">Delete</button>
                   </div>
                   <div className="ml-8 mt-2">
-                    <input
-                      type="text"
-                      defaultValue={step.notes ?? ''}
-                      onBlur={e => updateStepField(step, 'notes', e.target.value)}
+                    <input type="text" defaultValue={step.notes ?? ''} onBlur={e => updateStepField(step, 'notes', e.target.value)}
                       placeholder="Notes..."
-                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 w-full focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
+                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 w-full focus:outline-none focus:ring-1 focus:ring-amber-500" />
                   </div>
                 </div>
               ))}
@@ -451,59 +439,31 @@ export default function ProjectDetailPage() {
           )}
 
           {!showAddStep ? (
-            <button
-              onClick={() => setShowAddStep(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
-            >
+            <button onClick={() => setShowAddStep(true)} className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
               + Add Step
             </button>
           ) : (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setUseLibrary(false)}
-                  className={`text-sm px-3 py-1 rounded ${!useLibrary ? 'bg-gray-700 text-white' : 'text-gray-400'}`}
-                >
-                  Custom
-                </button>
-                <button
-                  onClick={() => setUseLibrary(true)}
-                  className={`text-sm px-3 py-1 rounded ${useLibrary ? 'bg-gray-700 text-white' : 'text-gray-400'}`}
-                >
-                  From Library
-                </button>
+                <button onClick={() => setUseLibrary(false)} className={`text-sm px-3 py-1 rounded ${!useLibrary ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>Custom</button>
+                <button onClick={() => setUseLibrary(true)} className={`text-sm px-3 py-1 rounded ${useLibrary ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>From Library</button>
               </div>
               {useLibrary ? (
-                <select
-                  value={selectedLibraryStep}
-                  onChange={e => setSelectedLibraryStep(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                >
+                <select value={selectedLibraryStep} onChange={e => setSelectedLibraryStep(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500">
                   <option value="">— Pick from library —</option>
-                  {stepLibrary.map(s => (
-                    <option key={s.id} value={s.step_name}>{s.step_name}</option>
-                  ))}
+                  {stepLibrary.map(s => <option key={s.id} value={s.step_name}>{s.step_name}</option>)}
                 </select>
               ) : (
-                <input
-                  type="text"
-                  placeholder="Step name"
-                  value={newStepName}
-                  onChange={e => setNewStepName(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
+                <input type="text" placeholder="Step name" value={newStepName} onChange={e => setNewStepName(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
               )}
               <div className="flex gap-2">
-                <button
-                  onClick={handleAddStep}
-                  disabled={addingStep || (useLibrary ? !selectedLibraryStep : !newStepName)}
-                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
-                >
+                <button onClick={handleAddStep} disabled={addingStep || (useLibrary ? !selectedLibraryStep : !newStepName)}
+                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
                   {addingStep ? 'Adding...' : 'Add'}
                 </button>
-                <button onClick={() => { setShowAddStep(false); setNewStepName(''); setSelectedLibraryStep('') }} className="text-gray-400 hover:text-white text-sm px-3">
-                  Cancel
-                </button>
+                <button onClick={() => { setShowAddStep(false); setNewStepName(''); setSelectedLibraryStep('') }} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
               </div>
             </div>
           )}
@@ -512,63 +472,109 @@ export default function ProjectDetailPage() {
 
       {/* ── Quote Tab ── */}
       {tab === 'quote' && (
-        <div className="space-y-5">
-          {quote ? (
-            <>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                  <p className="text-xs text-gray-400 mb-1">Base Price</p>
-                  <p className="text-xl font-semibold">{quote.base_price != null ? `$${quote.base_price.toFixed(2)}` : '—'}</p>
+        <div className="space-y-6">
+          {/* Quote card */}
+          {!quote ? (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+              <p className="text-gray-400 mb-4">No quote yet for this project.</p>
+              <Link
+                href={`/dashboard/projects/${id}/quote-agent`}
+                className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-5 py-2.5 rounded-lg text-sm inline-block"
+              >
+                Start AI Quote
+              </Link>
+            </div>
+          ) : (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="font-semibold">Quote</h2>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${QUOTE_STATUS_COLORS[quote.status ?? 'initial']}`}>
+                    {(quote.status ?? 'initial').charAt(0).toUpperCase() + (quote.status ?? 'initial').slice(1)}
+                    {(quote.version ?? 1) > 1 && ` v${quote.version}`}
+                  </span>
                 </div>
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                  <p className="text-xs text-gray-400 mb-1">Markup</p>
-                  <p className="text-xl font-semibold">{quote.markup_percentage != null ? `${quote.markup_percentage}%` : '—'}</p>
-                </div>
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                  <p className="text-xs text-gray-400 mb-1">Total Price</p>
-                  <p className="text-xl font-semibold text-amber-400">{quote.total_price != null ? `$${quote.total_price.toFixed(2)}` : '—'}</p>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/dashboard/projects/${id}/quote-agent`}
+                    className="text-sm text-amber-400 hover:text-amber-300"
+                  >
+                    Open Quote Agent
+                  </Link>
                 </div>
               </div>
 
-              {quote.add_ons.length > 0 && (
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-300 mb-2">Add-ons</h3>
+              {quote.total_price != null && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">Final Price</p>
+                  <p className="text-3xl font-bold text-amber-400">${quote.total_price.toLocaleString()}</p>
+                </div>
+              )}
+
+              {quote.scope_of_work && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Scope of Work</p>
+                  <p className="text-sm text-gray-300 leading-relaxed">{quote.scope_of_work}</p>
+                </div>
+              )}
+
+              {quote.complexity_assessment && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Complexity Assessment</p>
+                  <p className="text-sm text-gray-300">{quote.complexity_assessment}</p>
+                </div>
+              )}
+
+              {quote.add_ons?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Add-ons</p>
                   {quote.add_ons.map((a, i) => (
-                    <div key={i} className="flex justify-between text-sm text-gray-300 py-1">
+                    <div key={i} className="flex justify-between text-sm text-gray-300">
                       <span>{a.name}</span>
                       <span>${a.price.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
               )}
-
-              {quote.ai_conversation_history.length > 0 && (
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3 max-h-96 overflow-y-auto">
-                  <h3 className="text-sm font-medium text-gray-300 mb-2">AI Conversation</h3>
-                  {quote.ai_conversation_history.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-xs rounded-lg px-3 py-2 text-sm ${
-                        msg.role === 'user'
-                          ? 'bg-amber-500 text-gray-950'
-                          : 'bg-gray-800 text-gray-100'
-                      }`}>
-                        {msg.content}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center text-gray-500 text-sm py-4">No quote yet for this project</div>
+            </div>
           )}
 
-          <button
-            disabled
-            className="opacity-40 bg-gray-700 text-gray-300 font-semibold px-5 py-2 rounded-lg text-sm cursor-not-allowed"
-          >
-            Open AI Quote Agent (coming soon)
-          </button>
+          {/* Design Meeting Notes */}
+          <div>
+            <h2 className="text-base font-semibold mb-3">Design Meeting Notes</h2>
+            <form onSubmit={handleAddNote} className="mb-4">
+              <textarea
+                value={newNote}
+                onChange={e => setNewNote(e.target.value)}
+                rows={3}
+                placeholder="Add meeting notes, customer preferences, or observations..."
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+              <button
+                type="submit"
+                disabled={addingNote || !newNote.trim()}
+                className="mt-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
+              >
+                {addingNote ? 'Adding...' : 'Add Note'}
+              </button>
+            </form>
+
+            {designNotes.length === 0 ? (
+              <p className="text-sm text-gray-500">No notes yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {designNotes.map(n => (
+                  <div key={n.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <p className="text-xs text-gray-500">{new Date(n.created_at).toLocaleString()}</p>
+                      <button onClick={() => handleDeleteNote(n.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
+                    </div>
+                    <p className="text-sm text-gray-200 mt-1 whitespace-pre-wrap">{n.notes}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -7,6 +7,9 @@ import type {
   StepLibraryItem,
   Quote,
   AIMessage,
+  PricingMaterial,
+  PricingAddon,
+  DesignMeetingNote,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -98,7 +101,7 @@ export async function updateProject(
   return data
 }
 
-// ── Materials ──────────────────────────────────────────────────────────────
+// ── Materials (project checklist) ──────────────────────────────────────────
 
 export async function getMaterialsByProjectId(projectId: string): Promise<MaterialItem[]> {
   const { data, error } = await supabase
@@ -230,6 +233,17 @@ export async function getQuoteByProjectId(projectId: string): Promise<Quote | nu
   return data
 }
 
+export async function getFinalizedQuotes(limit = 10): Promise<Quote[]> {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .eq('status', 'final')
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data ?? []
+}
+
 export async function createQuote(
   input: Omit<Quote, 'id' | 'created_at' | 'updated_at'>
 ): Promise<Quote> {
@@ -263,4 +277,110 @@ export async function appendAIMessage(
     .single()
   const history = (existing?.ai_conversation_history as AIMessage[]) ?? []
   return updateQuote(quoteId, { ai_conversation_history: [...history, message] })
+}
+
+// ── Pricing Materials ──────────────────────────────────────────────────────
+
+export async function getPricingMaterials(): Promise<PricingMaterial[]> {
+  const { data, error } = await supabase
+    .from('pricing_materials')
+    .select('*')
+    .order('category')
+  if (error) throw error
+  return data
+}
+
+export async function addPricingMaterial(
+  input: Omit<PricingMaterial, 'id' | 'created_at'>
+): Promise<PricingMaterial> {
+  const { data, error } = await supabase.from('pricing_materials').insert(input).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updatePricingMaterial(
+  id: string,
+  input: Partial<Omit<PricingMaterial, 'id' | 'created_at'>>
+): Promise<PricingMaterial> {
+  const { data, error } = await supabase
+    .from('pricing_materials')
+    .update(input)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deletePricingMaterial(id: string): Promise<void> {
+  const { error } = await supabase.from('pricing_materials').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Pricing Addons ─────────────────────────────────────────────────────────
+
+export async function getPricingAddons(): Promise<PricingAddon[]> {
+  const { data, error } = await supabase
+    .from('pricing_addons')
+    .select('*')
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+export async function addPricingAddon(
+  input: Omit<PricingAddon, 'id' | 'created_at'>
+): Promise<PricingAddon> {
+  const { data, error } = await supabase.from('pricing_addons').insert(input).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updatePricingAddon(
+  id: string,
+  input: Partial<Omit<PricingAddon, 'id' | 'created_at'>>
+): Promise<PricingAddon> {
+  const { data, error } = await supabase
+    .from('pricing_addons')
+    .update(input)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deletePricingAddon(id: string): Promise<void> {
+  const { error } = await supabase.from('pricing_addons').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Design Meeting Notes ───────────────────────────────────────────────────
+
+export async function getNotesByProjectId(projectId: string): Promise<DesignMeetingNote[]> {
+  const { data, error } = await supabase
+    .from('design_meeting_notes')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function addDesignMeetingNote(
+  projectId: string,
+  notes: string
+): Promise<DesignMeetingNote> {
+  const { data, error } = await supabase
+    .from('design_meeting_notes')
+    .insert({ project_id: projectId, notes, attachments: [] })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  const { error } = await supabase.from('design_meeting_notes').delete().eq('id', id)
+  if (error) throw error
 }

@@ -34,7 +34,6 @@ export interface Project {
   address: string | null
   notes: string | null
   required_fields_completed: RequiredFieldsCompleted
-  // joined
   customer?: Customer
 }
 
@@ -89,6 +88,8 @@ export interface AddOn {
   price: number
 }
 
+export type QuoteStatus = 'initial' | 'revised' | 'final'
+
 export interface Quote {
   id: string
   project_id: string
@@ -97,6 +98,41 @@ export interface Quote {
   add_ons: AddOn[]
   total_price: number | null
   markup_percentage: number | null
+  status: QuoteStatus
+  scope_of_work: string | null
+  complexity_assessment: string | null
+  version: number
   created_at: string
   updated_at: string
+}
+
+export type MaterialCategory = 'wood' | 'hardware' | 'finish' | 'trim' | 'lighting' | 'other'
+
+export interface PricingMaterial {
+  id: string
+  created_at: string
+  name: string
+  unit: string | null
+  unit_price: number | null
+  typical_flat_rate: number | null
+  category: MaterialCategory | null
+  notes: string | null
+}
+
+export interface PricingAddon {
+  id: string
+  created_at: string
+  name: string
+  unit: string | null
+  unit_price: number | null
+  typical_flat_rate: number | null
+  notes: string | null
+}
+
+export interface DesignMeetingNote {
+  id: string
+  project_id: string
+  created_at: string
+  notes: string
+  attachments: string[]
 }
