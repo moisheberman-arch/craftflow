@@ -90,6 +90,7 @@ export default function PricingConfigPage() {
   const [matFlat, setMatFlat] = useState('')
   const [matNotes, setMatNotes] = useState('')
   const [savingMat, setSavingMat] = useState(false)
+  const [matError, setMatError] = useState('')
 
   // Add addon form
   const [showAddAddon, setShowAddAddon] = useState(false)
@@ -99,6 +100,7 @@ export default function PricingConfigPage() {
   const [addonFlat, setAddonFlat] = useState('')
   const [addonNotes, setAddonNotes] = useState('')
   const [savingAddon, setSavingAddon] = useState(false)
+  const [addonError, setAddonError] = useState('')
 
   useEffect(() => {
     Promise.all([getPricingMaterials(), getPricingAddons()])
@@ -116,6 +118,7 @@ export default function PricingConfigPage() {
   async function handleAddMat(e: React.FormEvent) {
     e.preventDefault()
     setSavingMat(true)
+    setMatError('')
     try {
       const m = await addPricingMaterial({
         name: matName,
@@ -128,6 +131,8 @@ export default function PricingConfigPage() {
       setMaterials(prev => [...prev, m])
       setShowAddMat(false)
       setMatName(''); setMatCategory(''); setMatUnit(''); setMatUnitPrice(''); setMatFlat(''); setMatNotes('')
+    } catch (err) {
+      setMatError(err instanceof Error ? err.message : 'Failed to save. Run migration 002 in Supabase if tables are missing.')
     } finally {
       setSavingMat(false)
     }
@@ -147,6 +152,7 @@ export default function PricingConfigPage() {
   async function handleAddAddon(e: React.FormEvent) {
     e.preventDefault()
     setSavingAddon(true)
+    setAddonError('')
     try {
       const a = await addPricingAddon({
         name: addonName,
@@ -158,6 +164,8 @@ export default function PricingConfigPage() {
       setAddons(prev => [...prev, a])
       setShowAddAddon(false)
       setAddonName(''); setAddonUnit(''); setAddonUnitPrice(''); setAddonFlat(''); setAddonNotes('')
+    } catch (err) {
+      setAddonError(err instanceof Error ? err.message : 'Failed to save. Run migration 002 in Supabase if tables are missing.')
     } finally {
       setSavingAddon(false)
     }
@@ -224,12 +232,13 @@ export default function PricingConfigPage() {
                 <input placeholder="Notes" value={matNotes} onChange={e => setMatNotes(e.target.value)}
                   className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
               </div>
+              {matError && <p className="text-red-400 text-xs">{matError}</p>}
               <div className="flex gap-2">
                 <button type="submit" disabled={savingMat || !matName}
                   className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
                   {savingMat ? 'Saving...' : 'Add Material'}
                 </button>
-                <button type="button" onClick={() => setShowAddMat(false)} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+                <button type="button" onClick={() => { setShowAddMat(false); setMatError('') }} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
               </div>
             </form>
           )}
@@ -328,12 +337,13 @@ export default function PricingConfigPage() {
                 <input placeholder="Notes" value={addonNotes} onChange={e => setAddonNotes(e.target.value)}
                   className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500 col-span-2" />
               </div>
+              {addonError && <p className="text-red-400 text-xs">{addonError}</p>}
               <div className="flex gap-2">
                 <button type="submit" disabled={savingAddon || !addonName}
                   className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
                   {savingAddon ? 'Saving...' : 'Add Feature'}
                 </button>
-                <button type="button" onClick={() => setShowAddAddon(false)} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+                <button type="button" onClick={() => { setShowAddAddon(false); setAddonError('') }} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
               </div>
             </form>
           )}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   getProjectById, updateProject, getCustomers,
@@ -35,10 +35,56 @@ const QUOTE_STATUS_COLORS = {
   final: 'bg-emerald-900 text-emerald-200',
 }
 
+// Bug 2: stage-aware alert logic
+function getStageAlerts(project: Project): string[] {
+  const status = project.status
+  const rf = project.required_fields_completed
+  const hasCustomer = !!project.customer_id
+  const hasContactInfo = hasCustomer && rf.customer_info
+  const hasProjectType = !!project.project_type
+  const hasColorFinish = rf.color_finish
+
+  if (!status || status === 'lead' || status === 'completed') return []
+
+  if (status === 'design_meeting_scheduled') {
+    if (!hasContactInfo) return ['Customer contact info is missing']
+    return []
+  }
+  if (status === 'rendering') {
+    const alerts = []
+    if (!hasContactInfo) alerts.push('Customer contact info is missing')
+    if (!hasProjectType) alerts.push('Project type is not set')
+    return alerts
+  }
+  if (status === 'quote_issued') {
+    if (!hasColorFinish) return ['Color / finish has not been confirmed']
+    return []
+  }
+  if (status === 'deposit_received') {
+    const alerts = []
+    if (!hasColorFinish) alerts.push('Color / finish has not been confirmed')
+    if (!hasProjectType) alerts.push('Project type is not set')
+    return alerts
+  }
+  if (status === 'in_production') {
+    if (!hasColorFinish) return ['Color / finish has not been confirmed']
+    return []
+  }
+  return []
+}
+
 type Tab = 'overview' | 'materials' | 'steps' | 'quote'
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
+  // Bug 3: determine which tabs to show based on ?view param
+  const view = searchParams.get('view') ?? 'sales'
+  const isShopView = view === 'shop'
+  const visibleTabs: Tab[] = isShopView
+    ? ['overview', 'materials', 'steps', 'quote']
+    : ['overview', 'materials', 'quote']
+
   const [tab, setTab] = useState<Tab>('overview')
   const [project, setProject] = useState<Project | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -48,6 +94,7 @@ export default function ProjectDetailPage() {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [designNotes, setDesignNotes] = useState<DesignMeetingNote[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -77,24 +124,26 @@ export default function ProjectDetailPage() {
   const [addingNote, setAddingNote] = useState(false)
 
   useEffect(() => {
+    // Bug 5: each fetch is independent — one failing won't kill the others
     async function load() {
-      const [p, c, m, s, sl, q, dn] = await Promise.all([
-        getProjectById(id),
-        getCustomers(),
-        getMaterialsByProjectId(id),
-        getStepsByProjectId(id),
-        getStepLibrary(),
-        getQuoteByProjectId(id),
-        getNotesByProjectId(id),
+      const p = await getProjectById(id)
+      if (!p) { setError('Project not found'); return }
+      setProject(p)
+      setCustomerId(p.customer_id ?? '')
+      setProjectType(p.project_type ?? '')
+      setStatus(p.status ?? '')
+      setAddress(p.address ?? '')
+      setNotes(p.notes ?? '')
+
+      // Load secondary data independently — failures are non-fatal
+      const [c, m, s, sl, q, dn] = await Promise.all([
+        getCustomers().catch(() => [] as Customer[]),
+        getMaterialsByProjectId(id).catch(() => [] as MaterialItem[]),
+        getStepsByProjectId(id).catch(() => [] as ProductionStep[]),
+        getStepLibrary().catch(() => [] as StepLibraryItem[]),
+        getQuoteByProjectId(id).catch(() => null),
+        getNotesByProjectId(id).catch(() => [] as DesignMeetingNote[]),
       ])
-      if (p) {
-        setProject(p)
-        setCustomerId(p.customer_id ?? '')
-        setProjectType(p.project_type ?? '')
-        setStatus(p.status ?? '')
-        setAddress(p.address ?? '')
-        setNotes(p.notes ?? '')
-      }
       setCustomers(c)
       setMaterials(m)
       setSteps(s)
@@ -102,7 +151,7 @@ export default function ProjectDetailPage() {
       setQuote(q)
       setDesignNotes(dn)
     }
-    load().catch(console.error).finally(() => setLoading(false))
+    load().catch(err => setError(String(err))).finally(() => setLoading(false))
   }, [id])
 
   async function saveOverview() {
@@ -219,31 +268,44 @@ export default function ProjectDetailPage() {
     setDesignNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
-  const missingFields = project
-    ? Object.entries(project.required_fields_completed)
-        .filter(([, v]) => !v)
-        .map(([k]) => k.replace('_', ' '))
-    : []
-
   if (loading) return <div className="text-center py-8 text-gray-500">Loading...</div>
-  if (!project) return <div className="text-center py-8 text-gray-500">Project not found</div>
+  if (error || !project) return (
+    <div className="text-center py-8">
+      <p className="text-gray-400 mb-2">{error ?? 'Project not found'}</p>
+      <Link href="/dashboard/sales" className="text-amber-400 hover:text-amber-300 text-sm">← Back to Sales</Link>
+    </div>
+  )
+
+  // Bug 2: stage-aware alerts
+  const stageAlerts = getStageAlerts(project)
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-3 mb-6">
+        <Link
+          href={isShopView ? '/dashboard/shop' : '/dashboard/sales'}
+          className="text-gray-500 hover:text-gray-300 text-sm"
+        >
+          ← {isShopView ? 'Shop' : 'Sales'}
+        </Link>
         <h1 className="text-xl font-bold">
           {project.customer?.name ?? 'New Project'}
           {project.project_type && (
             <span className="text-gray-400 font-normal ml-2 text-base capitalize">
-              — {project.project_type.replace('_', ' ')}
+              — {project.project_type.replace(/_/g, ' ')}
             </span>
           )}
         </h1>
+        {project.status && (
+          <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">
+            {STATUS_LABELS[project.status]}
+          </span>
+        )}
       </div>
 
-      {/* Tabs */}
+      {/* Bug 3: tabs determined by view param */}
       <div className="flex gap-1 mb-6 border-b border-gray-800">
-        {(['overview', 'materials', 'steps', 'quote'] as Tab[]).map(t => (
+        {visibleTabs.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -253,7 +315,7 @@ export default function ProjectDetailPage() {
                 : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
-            {t}
+            {t === 'steps' ? 'Production Steps' : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -261,9 +323,11 @@ export default function ProjectDetailPage() {
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
         <div className="space-y-5">
-          {missingFields.length > 0 && (
-            <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">
-              <strong>Missing required fields:</strong> {missingFields.join(', ')}
+          {/* Bug 2: stage-aware yellow alert — only on overview, only if relevant */}
+          {stageAlerts.length > 0 && (
+            <div className="bg-yellow-950 border border-yellow-800 rounded-lg px-4 py-3 text-sm text-yellow-300">
+              <strong className="font-semibold">Action needed:</strong>{' '}
+              {stageAlerts.join(' · ')}
             </div>
           )}
 
@@ -290,7 +354,7 @@ export default function ProjectDetailPage() {
               >
                 <option value="">— Select type —</option>
                 {PROJECT_TYPES.map(t => (
-                  <option key={t} value={t} className="capitalize">{t.replace('_', ' ')}</option>
+                  <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>
                 ))}
               </select>
             </div>
@@ -316,6 +380,31 @@ export default function ProjectDetailPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 placeholder="Job site address"
               />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm text-gray-400">Color / Finish Confirmed</label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={project.required_fields_completed.color_finish}
+                  onChange={async () => {
+                    const updated = await updateProject(id, {
+                      required_fields_completed: {
+                        ...project.required_fields_completed,
+                        color_finish: !project.required_fields_completed.color_finish,
+                      },
+                    })
+                    setProject(updated)
+                  }}
+                  className="accent-amber-500 w-4 h-4"
+                />
+                <span className="text-sm text-gray-300">
+                  {project.required_fields_completed.color_finish ? 'Yes' : 'Not yet'}
+                </span>
+              </label>
             </div>
           </div>
 
@@ -400,7 +489,7 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* ── Steps Tab ── */}
+      {/* ── Production Steps Tab (shop view only) ── */}
       {tab === 'steps' && (
         <div className="space-y-3">
           {saveToLibraryPrompt && (
@@ -473,12 +562,11 @@ export default function ProjectDetailPage() {
       {/* ── Quote Tab ── */}
       {tab === 'quote' && (
         <div className="space-y-6">
-          {/* Quote card */}
           {!quote ? (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
               <p className="text-gray-400 mb-4">No quote yet for this project.</p>
               <Link
-                href={`/dashboard/projects/${id}/quote-agent`}
+                href={`/dashboard/projects/${id}/quote-agent?view=${view}`}
                 className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-5 py-2.5 rounded-lg text-sm inline-block"
               >
                 Start AI Quote
@@ -494,14 +582,12 @@ export default function ProjectDetailPage() {
                     {(quote.version ?? 1) > 1 && ` v${quote.version}`}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/dashboard/projects/${id}/quote-agent`}
-                    className="text-sm text-amber-400 hover:text-amber-300"
-                  >
-                    Open Quote Agent
-                  </Link>
-                </div>
+                <Link
+                  href={`/dashboard/projects/${id}/quote-agent?view=${view}`}
+                  className="text-sm text-amber-400 hover:text-amber-300"
+                >
+                  Open Quote Agent
+                </Link>
               </div>
 
               {quote.total_price != null && (
@@ -510,30 +596,16 @@ export default function ProjectDetailPage() {
                   <p className="text-3xl font-bold text-amber-400">${quote.total_price.toLocaleString()}</p>
                 </div>
               )}
-
               {quote.scope_of_work && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Scope of Work</p>
                   <p className="text-sm text-gray-300 leading-relaxed">{quote.scope_of_work}</p>
                 </div>
               )}
-
               {quote.complexity_assessment && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Complexity Assessment</p>
                   <p className="text-sm text-gray-300">{quote.complexity_assessment}</p>
-                </div>
-              )}
-
-              {quote.add_ons?.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Add-ons</p>
-                  {quote.add_ons.map((a, i) => (
-                    <div key={i} className="flex justify-between text-sm text-gray-300">
-                      <span>{a.name}</span>
-                      <span>${a.price.toFixed(2)}</span>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -550,15 +622,11 @@ export default function ProjectDetailPage() {
                 placeholder="Add meeting notes, customer preferences, or observations..."
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
-              <button
-                type="submit"
-                disabled={addingNote || !newNote.trim()}
-                className="mt-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
-              >
+              <button type="submit" disabled={addingNote || !newNote.trim()}
+                className="mt-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
                 {addingNote ? 'Adding...' : 'Add Note'}
               </button>
             </form>
-
             {designNotes.length === 0 ? (
               <p className="text-sm text-gray-500">No notes yet.</p>
             ) : (

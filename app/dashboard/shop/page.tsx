@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getProjects } from '@/lib/api/supabase-client'
-import { getMaterialsByProjectId, getStepsByProjectId } from '@/lib/api/supabase-client'
+import { getProjects, getMaterialsByProjectId, getStepsByProjectId } from '@/lib/api/supabase-client'
 import type { Project, MaterialItem, ProductionStep } from '@/lib/core/types'
 
 interface ProjectWithCounts extends Project {
@@ -57,9 +56,10 @@ export default function ShopDashboard() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map(p => (
+            // Bug 5: add ?view=shop so project detail shows correct tabs
             <Link
               key={p.id}
-              href={`/dashboard/projects/${p.id}`}
+              href={`/dashboard/projects/${p.id}?view=shop`}
               className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-amber-500/50 transition-colors block"
             >
               <div className="flex items-start justify-between mb-3">
@@ -68,7 +68,7 @@ export default function ShopDashboard() {
                     {p.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}
                   </p>
                   <p className="text-sm text-gray-400 capitalize mt-0.5">
-                    {p.project_type?.replace('_', ' ') ?? '—'}
+                    {p.project_type?.replace(/_/g, ' ') ?? '—'}
                   </p>
                 </div>
                 <span className={`text-xs font-medium px-2 py-1 rounded-full ${
