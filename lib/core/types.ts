@@ -136,3 +136,14 @@ export interface DesignMeetingNote {
   notes: string
   attachments: string[]
 }
+
+export interface ShoppingListItem {
+  id: string
+  project_id: string
+  created_at: string
+  item: string
+  purchased: boolean
+  notes: string | null
+  // joined
+  project?: Project
+}

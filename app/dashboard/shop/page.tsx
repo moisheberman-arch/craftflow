@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { getProjects, getMaterialsByProjectId, getStepsByProjectId } from '@/lib/api/supabase-client'
+
 import type { Project, MaterialItem, ProductionStep } from '@/lib/core/types'
 
 interface ProjectWithCounts extends Project {
@@ -47,7 +48,15 @@ export default function ShopDashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Shop Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Shop Dashboard</h1>
+        <Link
+          href="/dashboard/shop/shopping-list"
+          className="text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-200 px-4 py-2 rounded-lg transition-colors font-medium"
+        >
+          🛒 Shopping List
+        </Link>
+      </div>
 
       {loading ? (
         <div className="text-center text-gray-500 py-8">Loading...</div>

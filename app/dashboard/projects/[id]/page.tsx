@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import ShopView from './ShopView'
 import {
   getProjectById, updateProject, getCustomers,
   getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial,
@@ -275,6 +276,11 @@ export default function ProjectDetailPage() {
       <Link href="/dashboard/sales" className="text-amber-400 hover:text-amber-300 text-sm">← Back to Sales</Link>
     </div>
   )
+
+  // Fix 3: Shop view gets its own full-screen layout
+  if (isShopView) {
+    return <ShopView project={project} />
+  }
 
   // Bug 2: stage-aware alerts
   const stageAlerts = getStageAlerts(project)

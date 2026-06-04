@@ -10,6 +10,7 @@ import type {
   PricingMaterial,
   PricingAddon,
   DesignMeetingNote,
+  ShoppingListItem,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -382,5 +383,61 @@ export async function addDesignMeetingNote(
 
 export async function deleteNote(id: string): Promise<void> {
   const { error } = await supabase.from('design_meeting_notes').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Shopping List ──────────────────────────────────────────────────────────
+
+export async function getShoppingListByProjectId(projectId: string): Promise<ShoppingListItem[]> {
+  const { data, error } = await supabase
+    .from('shopping_list')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at')
+  if (error) throw error
+  return data
+}
+
+export async function getAllUnpurchasedShoppingItems(): Promise<ShoppingListItem[]> {
+  const { data, error } = await supabase
+    .from('shopping_list')
+    .select('*, project:projects(*, customer:customers(*))')
+    .eq('purchased', false)
+    .order('project_id')
+    .order('created_at')
+  if (error) throw error
+  return data as ShoppingListItem[]
+}
+
+export async function addShoppingListItem(
+  projectId: string,
+  item: string,
+  notes?: string
+): Promise<ShoppingListItem> {
+  const { data, error } = await supabase
+    .from('shopping_list')
+    .insert({ project_id: projectId, item, purchased: false, notes: notes ?? null })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateShoppingListItem(
+  id: string,
+  input: Partial<Pick<ShoppingListItem, 'purchased' | 'notes' | 'item'>>
+): Promise<ShoppingListItem> {
+  const { data, error } = await supabase
+    .from('shopping_list')
+    .update(input)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteShoppingListItem(id: string): Promise<void> {
+  const { error } = await supabase.from('shopping_list').delete().eq('id', id)
   if (error) throw error
 }
