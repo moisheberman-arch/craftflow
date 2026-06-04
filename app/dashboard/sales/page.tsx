@@ -12,16 +12,24 @@ import type { Project, ProjectStatus, Customer } from '@/lib/core/types'
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   lead: 'Lead',
+  tentative_quote_sent: 'Tentative Quote Sent',
   design_meeting_scheduled: 'Design Meeting Scheduled',
-  rendering: 'Rendering',
-  quote_issued: 'Quote Issued',
+  post_design_meeting: 'Post Design Meeting',
+  rendering_in_progress: 'Rendering In Progress',
+  final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
   completed: 'Completed',
 }
 
 const SALES_SECTIONS: ProjectStatus[] = [
-  'lead', 'design_meeting_scheduled', 'rendering', 'quote_issued', 'deposit_received',
+  'lead',
+  'tentative_quote_sent',
+  'design_meeting_scheduled',
+  'post_design_meeting',
+  'rendering_in_progress',
+  'final_quote_issued',
+  'deposit_received',
 ]
 
 // ── Customer Modal ──────────────────────────────────────────────────────────
@@ -208,13 +216,17 @@ function CustomersModal({
                   </thead>
                   <tbody>
                     {filtered.map(c => (
-                      <tr key={c.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/40">
+                      // Fix 1: entire row clickable — action buttons stop propagation
+                      <tr
+                        key={c.id}
+                        onClick={() => openDetail(c)}
+                        className="border-b border-gray-800 last:border-0 hover:bg-gray-800/40 cursor-pointer"
+                      >
                         <td className="px-3 py-3 font-medium">{c.name}</td>
                         <td className="px-3 py-3 text-gray-400">{c.phone ?? '—'}</td>
                         <td className="px-3 py-3 text-gray-400">{c.email ?? '—'}</td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-3">
-                            <button onClick={() => openDetail(c)} className="text-amber-400 hover:text-amber-300 text-xs">View</button>
                             <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-white text-xs">Edit</button>
                             <button onClick={() => handleDeleteCustomer(c.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
                           </div>

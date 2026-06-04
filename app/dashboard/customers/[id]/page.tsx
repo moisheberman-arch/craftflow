@@ -8,9 +8,11 @@ import type { Customer, Project, ProjectStatus } from '@/lib/core/types'
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   lead: 'Lead',
-  design_meeting_scheduled: 'Design Meeting',
-  rendering: 'Rendering',
-  quote_issued: 'Quote Issued',
+  tentative_quote_sent: 'Tentative Quote Sent',
+  design_meeting_scheduled: 'Design Meeting Scheduled',
+  post_design_meeting: 'Post Design Meeting',
+  rendering_in_progress: 'Rendering In Progress',
+  final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
   completed: 'Completed',

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -64,6 +64,43 @@ export default function QuoteAgentPage() {
   const [breakdown, setBreakdown] = useState<{ item: string; amount: string }[]>([])
   const [savingStatus, setSavingStatus] = useState<QuoteStatus | null>(null)
   const [statusSaved, setStatusSaved] = useState(false)
+
+  // Fix 4: Voice input state
+  const [isListening, setIsListening] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(false)
+  const recognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    // Check Web Speech API support
+    const SpeechRecognition =
+      (typeof window !== 'undefined' &&
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) || null
+    setSpeechSupported(!!SpeechRecognition)
+  }, [])
+
+  const startListening = useCallback(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) return
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = 'en-US'
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript
+      setInput(prev => prev ? prev + ' ' + transcript : transcript)
+    }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }, [])
+
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop()
+    setIsListening(false)
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -337,15 +374,35 @@ export default function QuoteAgentPage() {
                 rows={3}
                 className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
               />
-              <button
-                onClick={sendMessage}
-                disabled={sending || !input.trim()}
-                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 font-semibold px-4 rounded-lg text-sm self-end"
-              >
-                Send
-              </button>
+              <div className="flex flex-col gap-2 self-end">
+                {/* Fix 4: Mic button — hidden if Web Speech API not supported */}
+                {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={isListening ? stopListening : startListening}
+                    title={isListening ? 'Stop recording' : 'Start voice input'}
+                    className={`w-10 h-10 flex items-center justify-center rounded-lg text-lg transition-all ${
+                      isListening
+                        ? 'bg-red-600 hover:bg-red-500 animate-pulse text-white'
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    }`}
+                  >
+                    🎙️
+                  </button>
+                )}
+                <button
+                  onClick={sendMessage}
+                  disabled={sending || !input.trim()}
+                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
+                >
+                  Send
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 mt-1">Enter to send · Shift+Enter for newline</p>
+            <p className="text-xs text-gray-600 mt-1">
+              Enter to send · Shift+Enter for newline
+              {speechSupported && <span> · 🎙️ Voice input works best in Chrome</span>}
+            </p>
           </div>
         </div>
 

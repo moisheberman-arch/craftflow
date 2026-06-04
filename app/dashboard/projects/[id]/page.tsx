@@ -12,20 +12,27 @@ import {
   getStepLibrary, addStepToLibrary,
   getQuoteByProjectId,
   getNotesByProjectId, addDesignMeetingNote, deleteNote,
+  getPricingAddons,
 } from '@/lib/api/supabase-client'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
-  Quote, ProjectStatus, ProjectType, DesignMeetingNote,
+  Quote, ProjectStatus, ProjectType, DesignMeetingNote, PricingAddon,
 } from '@/lib/core/types'
 
 const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
-const STATUSES: ProjectStatus[] = ['lead', 'design_meeting_scheduled', 'rendering', 'quote_issued', 'deposit_received', 'in_production', 'completed']
+const STATUSES: ProjectStatus[] = [
+  'lead', 'tentative_quote_sent', 'design_meeting_scheduled',
+  'post_design_meeting', 'rendering_in_progress', 'final_quote_issued',
+  'deposit_received', 'in_production', 'completed',
+]
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   lead: 'Lead',
+  tentative_quote_sent: 'Tentative Quote Sent',
   design_meeting_scheduled: 'Design Meeting Scheduled',
-  rendering: 'Rendering',
-  quote_issued: 'Quote Issued',
+  post_design_meeting: 'Post Design Meeting',
+  rendering_in_progress: 'Rendering In Progress',
+  final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
   completed: 'Completed',
@@ -37,40 +44,27 @@ const QUOTE_STATUS_COLORS = {
   final: 'bg-emerald-900 text-emerald-200',
 }
 
-// Bug 2: stage-aware alert logic
+// Fix 3: stage-aware alert logic (new pipeline)
 function getStageAlerts(project: Project): string[] {
   const status = project.status
   const rf = project.required_fields_completed
   const hasCustomer = !!project.customer_id
   const hasContactInfo = hasCustomer && rf.customer_info
-  const hasProjectType = !!project.project_type
-  const hasColorFinish = rf.color_finish
+  const hasPrimaryMaterial = !!project.primary_material
 
-  if (!status || status === 'lead' || status === 'completed') return []
+  if (!status || status === 'lead' || status === 'tentative_quote_sent' || status === 'completed') return []
 
   if (status === 'design_meeting_scheduled') {
-    if (!hasContactInfo) return ['Customer contact info is missing']
-    return []
+    return hasContactInfo ? [] : ['Customer contact info is missing']
   }
-  if (status === 'rendering') {
+  if (status === 'post_design_meeting') {
     const alerts = []
     if (!hasContactInfo) alerts.push('Customer contact info is missing')
-    if (!hasProjectType) alerts.push('Project type is not set')
+    if (!hasPrimaryMaterial) alerts.push('Primary material has not been selected')
     return alerts
   }
-  if (status === 'quote_issued') {
-    if (!hasColorFinish) return ['Color / finish has not been confirmed']
-    return []
-  }
-  if (status === 'deposit_received') {
-    const alerts = []
-    if (!hasColorFinish) alerts.push('Color / finish has not been confirmed')
-    if (!hasProjectType) alerts.push('Project type is not set')
-    return alerts
-  }
-  if (status === 'in_production') {
-    if (!hasColorFinish) return ['Color / finish has not been confirmed']
-    return []
+  if (status === 'rendering_in_progress' || status === 'final_quote_issued' || status === 'deposit_received') {
+    return hasPrimaryMaterial ? [] : ['Primary material has not been selected']
   }
   return []
 }
@@ -100,12 +94,20 @@ export default function ProjectDetailPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Pricing addons (for preferences checklist)
+  const [pricingAddons, setPricingAddons] = useState<PricingAddon[]>([])
+
   // Overview form state
   const [customerId, setCustomerId] = useState('')
   const [projectType, setProjectType] = useState<ProjectType | ''>('')
   const [status, setStatus] = useState<ProjectStatus | ''>('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
+
+  // Customer Preferences state
+  const [primaryMaterial, setPrimaryMaterial] = useState('')
+  const [requestedAddons, setRequestedAddons] = useState<string[]>([])
+  const [prefNotes, setPrefNotes] = useState('')
 
   // Material form state
   const [newItemName, setNewItemName] = useState('')
@@ -138,13 +140,14 @@ export default function ProjectDetailPage() {
       setNotes(p.notes ?? '')
 
       // Load secondary data independently — failures are non-fatal
-      const [c, m, s, sl, q, dn] = await Promise.all([
+      const [c, m, s, sl, q, dn, addons] = await Promise.all([
         getCustomers().catch(() => [] as Customer[]),
         getMaterialsByProjectId(id).catch(() => [] as MaterialItem[]),
         getStepsByProjectId(id).catch(() => [] as ProductionStep[]),
         getStepLibrary().catch(() => [] as StepLibraryItem[]),
         getQuoteByProjectId(id).catch(() => null),
         getNotesByProjectId(id).catch(() => [] as DesignMeetingNote[]),
+        getPricingAddons().catch(() => [] as PricingAddon[]),
       ])
       setCustomers(c)
       setMaterials(m)
@@ -152,6 +155,9 @@ export default function ProjectDetailPage() {
       setStepLibrary(sl)
       setQuote(q)
       setDesignNotes(dn)
+      setPricingAddons(addons)
+      setPrimaryMaterial(p.primary_material ?? '')
+      setRequestedAddons((p.requested_addons as string[] | undefined) ?? [])
     }
     load().catch(err => setError(String(err))).finally(() => setLoading(false))
   }, [id])
@@ -165,9 +171,16 @@ export default function ProjectDetailPage() {
         status: (status as ProjectStatus) || null,
         address: address || null,
         notes: notes || null,
+        primary_material: primaryMaterial || null,
+        requested_addons: requestedAddons,
+        required_fields_completed: {
+          ...(project?.required_fields_completed ?? { customer_info: false, project_type: false, color_finish: false, quote_issued: false }),
+          customer_info: !!customerId,
+          project_type: !!projectType,
+        },
       })
       setProject(updated)
-      // Step 5: auto-seed default steps when status moves to deposit_received
+      // Auto-seed default steps when status moves to deposit_received
       if (status === 'deposit_received') {
         await seedDefaultStepsIfEmpty(id).catch(console.error)
       }
@@ -338,7 +351,7 @@ export default function ProjectDetailPage() {
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
         <div className="space-y-5">
-          {/* Bug 2: stage-aware yellow alert — only on overview, only if relevant */}
+          {/* Stage-aware yellow alert */}
           {stageAlerts.length > 0 && (
             <div className="bg-yellow-950 border border-yellow-800 rounded-lg px-4 py-3 text-sm text-yellow-300">
               <strong className="font-semibold">Action needed:</strong>{' '}
@@ -346,99 +359,97 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
+          {/* Project fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">Customer</label>
-              <select
-                value={customerId}
-                onChange={e => setCustomerId(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
+              <select value={customerId} onChange={e => setCustomerId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                 <option value="">— Select customer —</option>
-                {customers.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Project Type</label>
-              <select
-                value={projectType}
-                onChange={e => setProjectType(e.target.value as ProjectType)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
+              <select value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                 <option value="">— Select type —</option>
-                {PROJECT_TYPES.map(t => (
-                  <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>
-                ))}
+                {PROJECT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Status</label>
-              <select
-                value={status}
-                onChange={e => setStatus(e.target.value as ProjectStatus)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
+              <select value={status} onChange={e => setStatus(e.target.value as ProjectStatus)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                 <option value="">— Select status —</option>
-                {STATUSES.map(s => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
+                {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Address</label>
-              <input
-                type="text"
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              <input type="text" value={address} onChange={e => setAddress(e.target.value)}
                 placeholder="Job site address"
-              />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm text-gray-400">Color / Finish Confirmed</label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={project.required_fields_completed.color_finish}
-                  onChange={async () => {
-                    const updated = await updateProject(id, {
-                      required_fields_completed: {
-                        ...project.required_fields_completed,
-                        color_finish: !project.required_fields_completed.color_finish,
-                      },
-                    })
-                    setProject(updated)
-                  }}
-                  className="accent-amber-500 w-4 h-4"
-                />
-                <span className="text-sm text-gray-300">
-                  {project.required_fields_completed.color_finish ? 'Yes' : 'Not yet'}
-                </span>
-              </label>
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
             </div>
           </div>
 
           <div>
             <label className="block text-sm text-gray-400 mb-1">Notes</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={4}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
               placeholder="Project notes..."
-            />
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
           </div>
 
-          <button
-            onClick={saveOverview}
-            disabled={saving}
-            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-5 py-2 rounded-lg transition-colors text-sm"
-          >
+          {/* Fix 2: Customer Preferences card */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+            <h3 className="font-semibold text-sm text-white">Customer Preferences</h3>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Primary Material</label>
+              <select value={primaryMaterial} onChange={e => setPrimaryMaterial(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <option value="">— Select material —</option>
+                {['Maple', 'Walnut', 'Oak', 'Cherry', 'Painted MDF', 'Other'].map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            {pricingAddons.length > 0 && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Add-Ons Requested</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {pricingAddons.map(addon => (
+                    <label key={addon.id} className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={requestedAddons.includes(addon.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setRequestedAddons(prev => [...prev, addon.id])
+                          } else {
+                            setRequestedAddons(prev => prev.filter(id => id !== addon.id))
+                          }
+                        }}
+                        className="accent-amber-500 w-4 h-4 shrink-0"
+                      />
+                      <span className="text-sm text-gray-300 group-hover:text-white transition-colors">{addon.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Special Notes</label>
+              <textarea value={prefNotes} onChange={e => setPrefNotes(e.target.value)} rows={2}
+                placeholder="Anything else the customer mentioned..."
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+            </div>
+          </div>
+
+          <button onClick={saveOverview} disabled={saving}
+            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-5 py-2 rounded-lg transition-colors text-sm">
             {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
           </button>
         </div>

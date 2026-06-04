@@ -20,11 +20,21 @@ import type {
 } from '@/lib/core/types'
 
 const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
-const STATUSES: ProjectStatus[] = ['lead', 'design_meeting_scheduled', 'rendering', 'quote_issued', 'deposit_received', 'in_production', 'completed']
+const STATUSES: ProjectStatus[] = [
+  'lead', 'tentative_quote_sent', 'design_meeting_scheduled',
+  'post_design_meeting', 'rendering_in_progress', 'final_quote_issued',
+  'deposit_received', 'in_production', 'completed',
+]
 const STATUS_LABELS: Record<ProjectStatus, string> = {
-  lead: 'Lead', design_meeting_scheduled: 'Design Meeting', rendering: 'Rendering',
-  quote_issued: 'Quote Issued', deposit_received: 'Deposit Received',
-  in_production: 'In Production', completed: 'Completed',
+  lead: 'Lead',
+  tentative_quote_sent: 'Tentative Quote Sent',
+  design_meeting_scheduled: 'Design Meeting Scheduled',
+  post_design_meeting: 'Post Design Meeting',
+  rendering_in_progress: 'Rendering In Progress',
+  final_quote_issued: 'Final Quote Issued',
+  deposit_received: 'Deposit Received',
+  in_production: 'In Production',
+  completed: 'Completed',
 }
 
 // ── Small helper components ────────────────────────────────────────────────

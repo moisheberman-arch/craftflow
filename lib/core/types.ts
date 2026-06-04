@@ -10,9 +10,11 @@ export interface Customer {
 export type ProjectType = 'dining_table' | 'built_in' | 'bookcase' | 'buffet' | 'other'
 export type ProjectStatus =
   | 'lead'
+  | 'tentative_quote_sent'
   | 'design_meeting_scheduled'
-  | 'rendering'
-  | 'quote_issued'
+  | 'post_design_meeting'
+  | 'rendering_in_progress'
+  | 'final_quote_issued'
   | 'deposit_received'
   | 'in_production'
   | 'completed'
@@ -35,6 +37,8 @@ export interface Project {
   notes: string | null
   required_fields_completed: RequiredFieldsCompleted
   queue_position?: number | null
+  requested_addons?: string[]
+  primary_material?: string | null
   customer?: Customer
 }
 
