@@ -41,10 +41,12 @@ ALTER TABLE step_library
 ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS queue_position integer;
 
--- ── Re-seed step_library ──────────────────────────────────────────────────
--- Extend category type — add 'admin' to existing constraint if needed
--- (Supabase text columns without CHECK accept any value — safe to insert)
+-- ── Drop and recreate category check to include 'admin' ──────────────────
+ALTER TABLE step_library DROP CONSTRAINT IF EXISTS step_library_category_check;
+ALTER TABLE step_library ADD CONSTRAINT step_library_category_check
+  CHECK (category IN ('admin','design','sourcing','fabrication','finishing','assembly','installation','delivery'));
 
+-- ── Re-seed step_library ──────────────────────────────────────────────────
 DELETE FROM step_library;
 
 INSERT INTO step_library (sequence_order, step_name, category, step_type, waiting_on, is_optional) VALUES
