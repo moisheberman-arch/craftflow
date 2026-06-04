@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import ShopView from './ShopView'
+import { seedDefaultStepsIfEmpty } from '@/lib/api/supabase-client'
 import {
   getProjectById, updateProject, getCustomers,
   getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial,
@@ -166,6 +167,10 @@ export default function ProjectDetailPage() {
         notes: notes || null,
       })
       setProject(updated)
+      // Step 5: auto-seed default steps when status moves to deposit_received
+      if (status === 'deposit_received') {
+        await seedDefaultStepsIfEmpty(id).catch(console.error)
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } finally {
@@ -216,6 +221,10 @@ export default function ProjectDetailPage() {
         completed: false,
         assigned_to: null,
         notes: null,
+        step_type: 'action',
+        waiting_on: null,
+        is_current: false,
+        is_optional: false,
       })
       setSteps(prev => [...prev, s])
       setShowAddStep(false)
@@ -231,7 +240,7 @@ export default function ProjectDetailPage() {
   }
 
   async function saveStepToLibrary(name: string) {
-    const item = await addStepToLibrary({ step_name: name, description: null, category: null })
+    const item = await addStepToLibrary({ step_name: name, description: null, category: null, step_type: 'action', waiting_on: null, is_optional: false, sequence_order: null })
     setStepLibrary(prev => [...prev, item])
     setSaveToLibraryPrompt(null)
   }

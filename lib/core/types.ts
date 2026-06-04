@@ -34,6 +34,7 @@ export interface Project {
   address: string | null
   notes: string | null
   required_fields_completed: RequiredFieldsCompleted
+  queue_position?: number | null
   customer?: Customer
 }
 
@@ -48,6 +49,9 @@ export interface MaterialItem {
   created_at: string
 }
 
+export type StepType = 'action' | 'waiting'
+export type WaitingOn = 'customer' | 'supplier' | 'designer' | 'internal'
+
 export interface ProductionStep {
   id: string
   project_id: string
@@ -58,9 +62,14 @@ export interface ProductionStep {
   assigned_to: string | null
   notes: string | null
   created_at: string
+  step_type: StepType
+  waiting_on: WaitingOn | null
+  is_current: boolean
+  is_optional: boolean
 }
 
 export type StepCategory =
+  | 'admin'
   | 'design'
   | 'sourcing'
   | 'fabrication'
@@ -75,6 +84,35 @@ export interface StepLibraryItem {
   description: string | null
   category: StepCategory | null
   created_at: string
+  step_type: StepType
+  waiting_on: WaitingOn | null
+  is_optional: boolean
+  sequence_order: number | null
+}
+
+export interface StepSubtask {
+  id: string
+  step_id: string
+  project_id: string
+  created_at: string
+  description: string
+  completed: boolean
+}
+
+export type QuestionDirectedAt = 'customer' | 'internal'
+
+export interface OpenQuestion {
+  id: string
+  project_id: string
+  step_id: string | null
+  created_at: string
+  question: string
+  directed_at: QuestionDirectedAt | null
+  resolved: boolean
+  resolved_at: string | null
+  answer: string | null
+  // joined
+  project?: Project
 }
 
 export interface AIMessage {
@@ -144,6 +182,5 @@ export interface ShoppingListItem {
   item: string
   purchased: boolean
   notes: string | null
-  // joined
   project?: Project
 }

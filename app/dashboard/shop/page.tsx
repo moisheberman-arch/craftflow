@@ -2,120 +2,339 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getProjects, getMaterialsByProjectId, getStepsByProjectId } from '@/lib/api/supabase-client'
+import { useRouter } from 'next/navigation'
+import {
+  getProjects, updateProject,
+  getMaterialsByProjectId,
+  getStepsByProjectId,
+  getSubtasksByProjectId,
+  getOpenQuestionsByProjectId,
+  getUnresolvedQuestionsAllProjects,
+} from '@/lib/api/supabase-client'
+import type { Project, ProductionStep, MaterialItem, StepSubtask, OpenQuestion } from '@/lib/core/types'
 
-import type { Project, MaterialItem, ProductionStep } from '@/lib/core/types'
-
-interface ProjectWithCounts extends Project {
-  stepsTotal: number
+interface EnrichedProject extends Project {
+  steps: ProductionStep[]
   stepsCompleted: number
+  currentStep: ProductionStep | null
+  nextStep: ProductionStep | null
   materialsTotal: number
   materialsReceived: number
+  openSubtasks: number
+  unresolvedQuestions: number
+  hasNoCurrentStep: boolean
+  inQueue: boolean
+  queueDays: number
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  deposit_received: 'Deposit Received',
-  in_production: 'In Production',
+function Badge({ label, color }: { label: string; color: string }) {
+  return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${color}`}>{label}</span>
+}
+
+function daysSince(dateStr: string): number {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
 }
 
 export default function ShopDashboard() {
-  const [projects, setProjects] = useState<ProjectWithCounts[]>([])
+  const router = useRouter()
+  const [projects, setProjects] = useState<EnrichedProject[]>([])
   const [loading, setLoading] = useState(true)
+  const [pendingQuestions, setPendingQuestions] = useState<OpenQuestion[]>([])
+  const [questionsCollapsed, setQuestionsCollapsed] = useState(false)
+
+  // Drag state for queue reordering
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      const all = await getProjects()
-      const active = all.filter(p => p.status === 'in_production' || p.status === 'deposit_received')
-      const withCounts = await Promise.all(
-        active.map(async p => {
-          const [steps, materials] = await Promise.all([
-            getStepsByProjectId(p.id).catch(() => [] as ProductionStep[]),
-            getMaterialsByProjectId(p.id).catch(() => [] as MaterialItem[]),
-          ])
-          return {
-            ...p,
-            stepsTotal: steps.length,
-            stepsCompleted: steps.filter(s => s.completed).length,
-            materialsTotal: materials.length,
-            materialsReceived: materials.filter(m => m.received).length,
-          }
-        })
+      const [allProjects, allQuestions] = await Promise.all([
+        getProjects(),
+        getUnresolvedQuestionsAllProjects().catch(() => [] as OpenQuestion[]),
+      ])
+      setPendingQuestions(allQuestions)
+
+      const active = allProjects.filter(
+        p => p.status === 'in_production' || p.status === 'deposit_received'
       )
-      setProjects(withCounts)
+
+      const enriched = await Promise.all(active.map(async p => {
+        const [steps, materials, subtasks, questions] = await Promise.all([
+          getStepsByProjectId(p.id).catch(() => [] as ProductionStep[]),
+          getMaterialsByProjectId(p.id).catch(() => [] as MaterialItem[]),
+          getSubtasksByProjectId(p.id).catch(() => [] as StepSubtask[]),
+          getOpenQuestionsByProjectId(p.id).catch(() => [] as OpenQuestion[]),
+        ])
+
+        const currentStep = steps.find(s => s.is_current) ?? null
+        const nextStep = currentStep
+          ? steps.find(s => !s.completed && !s.is_current && (s.sequence_order ?? 0) > (currentStep.sequence_order ?? 0)) ?? null
+          : steps.find(s => !s.completed) ?? null
+
+        const inQueue = currentStep?.step_name === 'Ready for Production — In Queue'
+        const openSubtasks = subtasks.filter(s => !s.completed).length
+        const unresolvedQuestions = questions.filter(q => !q.resolved).length
+
+        return {
+          ...p,
+          steps,
+          stepsCompleted: steps.filter(s => s.completed).length,
+          currentStep,
+          nextStep,
+          materialsTotal: materials.length,
+          materialsReceived: materials.filter(m => m.received).length,
+          openSubtasks,
+          unresolvedQuestions,
+          hasNoCurrentStep: !currentStep,
+          inQueue,
+          queueDays: inQueue && currentStep ? daysSince(currentStep.created_at) : 0,
+        } as EnrichedProject
+      }))
+
+      setProjects(enriched.sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999)))
     }
     load().catch(console.error).finally(() => setLoading(false))
   }, [])
 
+  const inProduction = projects.filter(p => !p.inQueue)
+  const inQueue = projects.filter(p => p.inQueue)
+
+  // Drag-to-reorder queue
+  function handleDragStart(id: string) { setDragId(id) }
+  function handleDragOver(e: React.DragEvent, id: string) { e.preventDefault(); setDragOver(id) }
+  async function handleDrop(targetId: string) {
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOver(null); return }
+    const reordered = [...inQueue]
+    const fromIdx = reordered.findIndex(p => p.id === dragId)
+    const toIdx = reordered.findIndex(p => p.id === targetId)
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    const updated = reordered.map((p, i) => ({ ...p, queue_position: i + 1 }))
+    setProjects(prev => {
+      const notQueue = prev.filter(p => !p.inQueue)
+      return [...notQueue, ...updated]
+    })
+    await Promise.all(updated.map((p, i) => updateProject(p.id, { queue_position: i + 1 })))
+    setDragId(null); setDragOver(null)
+  }
+
+  async function handleStartProduction(p: EnrichedProject) {
+    // Find and skip past the queue step to Production Started
+    const queueStep = p.steps.find(s => s.step_name === 'Ready for Production — In Queue')
+    const productionStep = p.steps.find(s => s.step_name === 'Production Started')
+    if (queueStep) {
+      await import('@/lib/api/supabase-client').then(({ updateStep }) =>
+        updateStep(queueStep.id, { completed: true, is_current: false })
+      )
+    }
+    if (productionStep) {
+      await import('@/lib/api/supabase-client').then(({ updateStep }) =>
+        updateStep(productionStep.id, { is_current: true })
+      )
+    }
+    await updateProject(p.id, { status: 'in_production' })
+    router.refresh()
+  }
+
+  if (loading) return <div className="text-center py-8 text-gray-500">Loading...</div>
+
+  // Group pending questions by project
+  const qByProject = new Map<string, OpenQuestion[]>()
+  for (const q of pendingQuestions) {
+    const pid = q.project_id
+    if (!qByProject.has(pid)) qByProject.set(pid, [])
+    qByProject.get(pid)!.push(q)
+  }
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Shop Dashboard</h1>
-        <Link
-          href="/dashboard/shop/shopping-list"
-          className="text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-200 px-4 py-2 rounded-lg transition-colors font-medium"
-        >
+        <Link href="/dashboard/shop/shopping-list"
+          className="text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-200 px-4 py-2 rounded-lg transition-colors font-medium">
           🛒 Shopping List
         </Link>
       </div>
 
-      {loading ? (
-        <div className="text-center text-gray-500 py-8">Loading...</div>
-      ) : projects.length === 0 ? (
-        <div className="text-center text-gray-500 py-8">No active production projects</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map(p => (
-            // Bug 5: add ?view=shop so project detail shows correct tabs
-            <Link
-              key={p.id}
-              href={`/dashboard/projects/${p.id}?view=shop`}
-              className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-amber-500/50 transition-colors block"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-semibold text-white">
-                    {p.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}
-                  </p>
-                  <p className="text-sm text-gray-400 capitalize mt-0.5">
-                    {p.project_type?.replace(/_/g, ' ') ?? '—'}
-                  </p>
-                </div>
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  p.status === 'in_production' ? 'bg-orange-900 text-orange-200' : 'bg-green-900 text-green-200'
-                }`}>
-                  {STATUS_LABELS[p.status ?? ''] ?? p.status}
-                </span>
-              </div>
-
-              <div className="space-y-2 mt-4">
-                <div>
-                  <div className="flex justify-between text-xs text-gray-400 mb-1">
-                    <span>Production Steps</span>
-                    <span>{p.stepsCompleted}/{p.stepsTotal}</span>
+      {/* Section 1: Pending Questions */}
+      {pendingQuestions.length > 0 && (
+        <div className="bg-orange-950/40 border border-orange-800 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-orange-800/60">
+            <div className="flex items-center gap-2">
+              <span className="text-orange-400 font-semibold text-sm">⚠ Pending Questions</span>
+              <span className="bg-orange-800 text-orange-200 text-xs font-bold px-2 py-0.5 rounded-full">
+                {pendingQuestions.length}
+              </span>
+            </div>
+            <button onClick={() => setQuestionsCollapsed(v => !v)}
+              className="text-orange-400 hover:text-orange-300 text-xs">
+              {questionsCollapsed ? 'Show' : 'Hide'}
+            </button>
+          </div>
+          {!questionsCollapsed && (
+            <div className="divide-y divide-orange-900/40">
+              {Array.from(qByProject.entries()).map(([pid, qs]) => {
+                const proj = projects.find(p => p.id === pid)
+                const label = proj
+                  ? `${proj.customer?.name ?? 'Unknown'} — ${proj.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+                  : 'Unknown Project'
+                return (
+                  <div key={pid} className="px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-orange-200">{label}</span>
+                      <Link href={`/dashboard/projects/${pid}?view=shop`}
+                        className="text-xs text-amber-400 hover:text-amber-300">Go to Project →</Link>
+                    </div>
+                    <div className="space-y-1">
+                      {qs.map(q => (
+                        <div key={q.id} className="flex items-center gap-2 text-xs text-orange-100">
+                          <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${
+                            q.directed_at === 'customer' ? 'bg-blue-900 text-blue-200' : 'bg-gray-700 text-gray-300'
+                          }`}>{q.directed_at}</span>
+                          <span>{q.question}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-500 rounded-full transition-all"
-                      style={{ width: p.stepsTotal > 0 ? `${(p.stepsCompleted / p.stepsTotal) * 100}%` : '0%' }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs text-gray-400 mb-1">
-                    <span>Materials Received</span>
-                    <span>{p.materialsReceived}/{p.materialsTotal}</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all"
-                      style={{ width: p.materialsTotal > 0 ? `${(p.materialsReceived / p.materialsTotal) * 100}%` : '0%' }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
+                )
+              })}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Section 2: In Production */}
+      {inProduction.length > 0 && (
+        <div>
+          <h2 className="font-bold text-white mb-3 flex items-center gap-2">
+            In Production
+            <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{inProduction.length}</span>
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {inProduction.map(p => (
+              <Link
+                key={p.id}
+                href={`/dashboard/projects/${p.id}?view=shop`}
+                className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-4 block transition-colors"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-bold text-white text-base">{p.customer?.name ?? 'No customer'}</p>
+                    <p className="text-sm text-gray-400 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {p.hasNoCurrentStep && (
+                      <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">No Active Step</span>
+                    )}
+                    {p.openSubtasks > 0 && (
+                      <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">{p.openSubtasks} subtasks</span>
+                    )}
+                    {p.unresolvedQuestions > 0 && (
+                      <span className="text-[10px] bg-orange-900 text-orange-200 px-1.5 py-0.5 rounded font-semibold">{p.unresolvedQuestions} Qs</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Current step */}
+                {p.currentStep ? (
+                  <div className="bg-blue-950/30 border border-blue-800/60 rounded-lg px-3 py-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-blue-200">{p.currentStep.step_name}</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${
+                        p.currentStep.step_type === 'waiting' ? 'bg-orange-900 text-orange-200' : 'bg-emerald-900 text-emerald-200'
+                      }`}>{p.currentStep.step_type}</span>
+                      {p.currentStep.waiting_on && (
+                        <span className="text-[10px] text-orange-300">({p.currentStep.waiting_on})</span>
+                      )}
+                    </div>
+                    {p.nextStep && (
+                      <p className="text-xs text-gray-500 mt-1">Next: {p.nextStep.step_name}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-red-950/30 border border-red-800/60 rounded-lg px-3 py-2 mb-3">
+                    <p className="text-xs text-red-400">No active step — click to set one</p>
+                  </div>
+                )}
+
+                {/* Progress bar */}
+                <div className="space-y-1.5">
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                      <span>Steps</span>
+                      <span>{p.stepsCompleted}/{p.steps.length}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full"
+                        style={{ width: p.steps.length > 0 ? `${(p.stepsCompleted / p.steps.length) * 100}%` : '0%' }} />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Materials: {p.materialsReceived}/{p.materialsTotal} received</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section 3: Up Next — In Queue */}
+      {inQueue.length > 0 && (
+        <div>
+          <h2 className="font-bold text-white mb-3 flex items-center gap-2">
+            Up Next — In Queue
+            <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{inQueue.length}</span>
+            <span className="text-xs text-gray-600 font-normal">Drag to reorder priority</span>
+          </h2>
+          <div className="space-y-2">
+            {inQueue.map(p => (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={() => handleDragStart(p.id)}
+                onDragOver={e => handleDragOver(e, p.id)}
+                onDrop={() => handleDrop(p.id)}
+                onDragEnd={() => { setDragId(null); setDragOver(null) }}
+                className={`bg-gray-900 border rounded-xl px-4 py-3 flex items-center gap-4 cursor-grab transition-all ${
+                  dragOver === p.id ? 'border-amber-500' : 'border-gray-800'
+                } ${dragId === p.id ? 'opacity-50' : ''}`}
+              >
+                <span className="text-gray-600 text-lg select-none">⠿</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-white">
+                    {p.customer?.name ?? 'No customer'}
+                    <span className="text-gray-400 font-normal ml-2 text-sm capitalize">
+                      — {p.project_type?.replace(/_/g, ' ') ?? '—'}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    In queue {p.queueDays} {p.queueDays === 1 ? 'day' : 'days'}
+                    {p.steps.length > 0 && ` · ${p.stepsCompleted}/${p.steps.length} steps pre-production`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href={`/dashboard/projects/${p.id}?view=shop`}
+                    onClick={e => e.stopPropagation()}
+                    className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded border border-gray-700">
+                    View
+                  </Link>
+                  <button
+                    onClick={e => { e.preventDefault(); handleStartProduction(p) }}
+                    className="text-xs bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Start Production
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {projects.length === 0 && (
+        <div className="text-center text-gray-500 py-12">No active production projects</div>
       )}
     </div>
   )

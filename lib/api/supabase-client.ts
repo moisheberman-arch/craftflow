@@ -11,6 +11,9 @@ import type {
   PricingAddon,
   DesignMeetingNote,
   ShoppingListItem,
+  StepSubtask,
+  OpenQuestion,
+  QuestionDirectedAt,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -40,11 +43,7 @@ export async function updateCustomer(
   input: Partial<Omit<Customer, 'id' | 'created_at'>>
 ): Promise<Customer> {
   const { data, error } = await supabase
-    .from('customers')
-    .update(input)
-    .eq('id', id)
-    .select()
-    .single()
+    .from('customers').update(input).eq('id', id).select().single()
   if (error) throw error
   return data
 }
@@ -62,19 +61,14 @@ export async function getProjects(): Promise<Project[]> {
 
 export async function getProjectById(id: string): Promise<Project | null> {
   const { data, error } = await supabase
-    .from('projects')
-    .select('*, customer:customers(*)')
-    .eq('id', id)
-    .single()
+    .from('projects').select('*, customer:customers(*)').eq('id', id).single()
   if (error) throw error
   return data as Project
 }
 
 export async function getProjectsByCustomerId(customerId: string): Promise<Project[]> {
   const { data, error } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('customer_id', customerId)
+    .from('projects').select('*').eq('customer_id', customerId)
     .order('updated_at', { ascending: false })
   if (error) throw error
   return data
@@ -95,21 +89,44 @@ export async function updateProject(
   const { data, error } = await supabase
     .from('projects')
     .update({ ...input, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+    .eq('id', id).select().single()
   if (error) throw error
-  return data
+  return data as Project
 }
 
-// ── Materials (project checklist) ──────────────────────────────────────────
+// Auto-insert 19 default steps when project reaches deposit_received
+export async function seedDefaultStepsIfEmpty(projectId: string): Promise<void> {
+  const { data: existing } = await supabase
+    .from('production_steps').select('id').eq('project_id', projectId).limit(1)
+  if (existing && existing.length > 0) return  // already has steps
+
+  const { data: library } = await supabase
+    .from('step_library').select('*').order('sequence_order')
+  if (!library || library.length === 0) return
+
+  const steps = library.map((s: StepLibraryItem, i: number) => ({
+    project_id: projectId,
+    step_name: s.step_name,
+    description: s.description,
+    sequence_order: s.sequence_order ?? i + 1,
+    completed: false,
+    assigned_to: null,
+    notes: null,
+    step_type: s.step_type ?? 'action',
+    waiting_on: s.waiting_on ?? null,
+    is_current: i === 0,  // step 1 is current
+    is_optional: s.is_optional ?? false,
+  }))
+
+  const { error } = await supabase.from('production_steps').insert(steps)
+  if (error) throw error
+}
+
+// ── Materials ──────────────────────────────────────────────────────────────
 
 export async function getMaterialsByProjectId(projectId: string): Promise<MaterialItem[]> {
   const { data, error } = await supabase
-    .from('materials_checklist')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('created_at')
+    .from('materials_checklist').select('*').eq('project_id', projectId).order('created_at')
   if (error) throw error
   return data
 }
@@ -118,10 +135,7 @@ export async function addMaterial(
   input: Omit<MaterialItem, 'id' | 'created_at'>
 ): Promise<MaterialItem> {
   const { data, error } = await supabase
-    .from('materials_checklist')
-    .insert(input)
-    .select()
-    .single()
+    .from('materials_checklist').insert(input).select().single()
   if (error) throw error
   return data
 }
@@ -131,11 +145,7 @@ export async function updateMaterial(
   input: Partial<Omit<MaterialItem, 'id' | 'created_at' | 'project_id'>>
 ): Promise<MaterialItem> {
   const { data, error } = await supabase
-    .from('materials_checklist')
-    .update(input)
-    .eq('id', id)
-    .select()
-    .single()
+    .from('materials_checklist').update(input).eq('id', id).select().single()
   if (error) throw error
   return data
 }
@@ -149,24 +159,18 @@ export async function deleteMaterial(id: string): Promise<void> {
 
 export async function getStepsByProjectId(projectId: string): Promise<ProductionStep[]> {
   const { data, error } = await supabase
-    .from('production_steps')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('sequence_order')
+    .from('production_steps').select('*').eq('project_id', projectId).order('sequence_order')
   if (error) throw error
-  return data
+  return data as ProductionStep[]
 }
 
 export async function addStep(
   input: Omit<ProductionStep, 'id' | 'created_at'>
 ): Promise<ProductionStep> {
   const { data, error } = await supabase
-    .from('production_steps')
-    .insert(input)
-    .select()
-    .single()
+    .from('production_steps').insert(input).select().single()
   if (error) throw error
-  return data
+  return data as ProductionStep
 }
 
 export async function updateStep(
@@ -174,13 +178,9 @@ export async function updateStep(
   input: Partial<Omit<ProductionStep, 'id' | 'created_at' | 'project_id'>>
 ): Promise<ProductionStep> {
   const { data, error } = await supabase
-    .from('production_steps')
-    .update(input)
-    .eq('id', id)
-    .select()
-    .single()
+    .from('production_steps').update(input).eq('id', id).select().single()
   if (error) throw error
-  return data
+  return data as ProductionStep
 }
 
 export async function deleteStep(id: string): Promise<void> {
@@ -188,30 +188,68 @@ export async function deleteStep(id: string): Promise<void> {
   if (error) throw error
 }
 
-export async function reorderSteps(
-  projectId: string,
-  orderedIds: string[]
-): Promise<void> {
+export async function reorderSteps(projectId: string, orderedIds: string[]): Promise<void> {
   await Promise.all(
     orderedIds.map((id, index) =>
-      supabase
-        .from('production_steps')
+      supabase.from('production_steps')
         .update({ sequence_order: index + 1 })
-        .eq('id', id)
-        .eq('project_id', projectId)
+        .eq('id', id).eq('project_id', projectId)
     )
   )
+}
+
+export async function setCurrentStep(projectId: string, stepId: string): Promise<void> {
+  // Clear all is_current for project
+  await supabase.from('production_steps')
+    .update({ is_current: false }).eq('project_id', projectId)
+  // Set the chosen step as current
+  await supabase.from('production_steps')
+    .update({ is_current: true }).eq('id', stepId)
+}
+
+export async function autoAdvanceCurrentStep(
+  projectId: string,
+  completedStepId: string
+): Promise<{ nextStep: ProductionStep | null; projectCompleted: boolean }> {
+  // Mark current step complete and not current
+  await supabase.from('production_steps')
+    .update({ completed: true, is_current: false })
+    .eq('id', completedStepId)
+
+  // Get all steps in order
+  const { data: steps } = await supabase
+    .from('production_steps').select('*')
+    .eq('project_id', projectId).order('sequence_order')
+
+  if (!steps) return { nextStep: null, projectCompleted: false }
+
+  // Find next incomplete step
+  const completedStep = steps.find(s => s.id === completedStepId)
+  const currentOrder = completedStep?.sequence_order ?? 0
+  const nextStep = steps.find(
+    s => !s.completed && s.id !== completedStepId && (s.sequence_order ?? 0) > currentOrder
+  ) ?? null
+
+  if (nextStep) {
+    await supabase.from('production_steps')
+      .update({ is_current: true }).eq('id', nextStep.id)
+    return { nextStep: nextStep as ProductionStep, projectCompleted: false }
+  }
+
+  // All steps done — mark project completed
+  await supabase.from('projects')
+    .update({ status: 'completed', updated_at: new Date().toISOString() })
+    .eq('id', projectId)
+  return { nextStep: null, projectCompleted: true }
 }
 
 // ── Step Library ───────────────────────────────────────────────────────────
 
 export async function getStepLibrary(): Promise<StepLibraryItem[]> {
   const { data, error } = await supabase
-    .from('step_library')
-    .select('*')
-    .order('step_name')
+    .from('step_library').select('*').order('sequence_order')
   if (error) throw error
-  return data
+  return data as StepLibraryItem[]
 }
 
 export async function addStepToLibrary(
@@ -219,28 +257,120 @@ export async function addStepToLibrary(
 ): Promise<StepLibraryItem> {
   const { data, error } = await supabase.from('step_library').insert(input).select().single()
   if (error) throw error
+  return data as StepLibraryItem
+}
+
+// ── Step Subtasks ──────────────────────────────────────────────────────────
+
+export async function getSubtasksByStepId(stepId: string): Promise<StepSubtask[]> {
+  const { data, error } = await supabase
+    .from('step_subtasks').select('*').eq('step_id', stepId).order('created_at')
+  if (error) throw error
   return data
+}
+
+export async function addSubtask(
+  stepId: string,
+  projectId: string,
+  description: string
+): Promise<StepSubtask> {
+  const { data, error } = await supabase
+    .from('step_subtasks')
+    .insert({ step_id: stepId, project_id: projectId, description, completed: false })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateSubtask(
+  id: string,
+  input: Partial<Pick<StepSubtask, 'completed' | 'description'>>
+): Promise<StepSubtask> {
+  const { data, error } = await supabase
+    .from('step_subtasks').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteSubtask(id: string): Promise<void> {
+  const { error } = await supabase.from('step_subtasks').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function getSubtasksByProjectId(projectId: string): Promise<StepSubtask[]> {
+  const { data, error } = await supabase
+    .from('step_subtasks').select('*').eq('project_id', projectId)
+  if (error) throw error
+  return data
+}
+
+// ── Open Questions ─────────────────────────────────────────────────────────
+
+export async function getOpenQuestionsByProjectId(projectId: string): Promise<OpenQuestion[]> {
+  const { data, error } = await supabase
+    .from('open_questions').select('*').eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function addOpenQuestion(
+  projectId: string,
+  question: string,
+  directedAt: QuestionDirectedAt,
+  stepId?: string | null
+): Promise<OpenQuestion> {
+  const { data, error } = await supabase
+    .from('open_questions')
+    .insert({
+      project_id: projectId,
+      step_id: stepId ?? null,
+      question,
+      directed_at: directedAt,
+      resolved: false,
+    })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function resolveQuestion(id: string, answer: string): Promise<OpenQuestion> {
+  const { data, error } = await supabase
+    .from('open_questions')
+    .update({ resolved: true, resolved_at: new Date().toISOString(), answer })
+    .eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteQuestion(id: string): Promise<void> {
+  const { error } = await supabase.from('open_questions').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function getUnresolvedQuestionsAllProjects(): Promise<OpenQuestion[]> {
+  const { data, error } = await supabase
+    .from('open_questions')
+    .select('*, project:projects(*, customer:customers(*))')
+    .eq('resolved', false)
+    .order('created_at')
+  if (error) throw error
+  return data as OpenQuestion[]
 }
 
 // ── Quotes ─────────────────────────────────────────────────────────────────
 
 export async function getQuoteByProjectId(projectId: string): Promise<Quote | null> {
   const { data, error } = await supabase
-    .from('quotes')
-    .select('*')
-    .eq('project_id', projectId)
-    .maybeSingle()
+    .from('quotes').select('*').eq('project_id', projectId).maybeSingle()
   if (error) throw error
   return data
 }
 
 export async function getFinalizedQuotes(limit = 10): Promise<Quote[]> {
   const { data, error } = await supabase
-    .from('quotes')
-    .select('*')
-    .eq('status', 'final')
-    .order('updated_at', { ascending: false })
-    .limit(limit)
+    .from('quotes').select('*').eq('status', 'final')
+    .order('updated_at', { ascending: false }).limit(limit)
   if (error) throw error
   return data ?? []
 }
@@ -260,22 +390,14 @@ export async function updateQuote(
   const { data, error } = await supabase
     .from('quotes')
     .update({ ...input, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+    .eq('id', id).select().single()
   if (error) throw error
   return data
 }
 
-export async function appendAIMessage(
-  quoteId: string,
-  message: AIMessage
-): Promise<Quote> {
+export async function appendAIMessage(quoteId: string, message: AIMessage): Promise<Quote> {
   const { data: existing } = await supabase
-    .from('quotes')
-    .select('ai_conversation_history')
-    .eq('id', quoteId)
-    .single()
+    .from('quotes').select('ai_conversation_history').eq('id', quoteId).single()
   const history = (existing?.ai_conversation_history as AIMessage[]) ?? []
   return updateQuote(quoteId, { ai_conversation_history: [...history, message] })
 }
@@ -283,10 +405,7 @@ export async function appendAIMessage(
 // ── Pricing Materials ──────────────────────────────────────────────────────
 
 export async function getPricingMaterials(): Promise<PricingMaterial[]> {
-  const { data, error } = await supabase
-    .from('pricing_materials')
-    .select('*')
-    .order('category')
+  const { data, error } = await supabase.from('pricing_materials').select('*').order('category')
   if (error) throw error
   return data
 }
@@ -304,11 +423,7 @@ export async function updatePricingMaterial(
   input: Partial<Omit<PricingMaterial, 'id' | 'created_at'>>
 ): Promise<PricingMaterial> {
   const { data, error } = await supabase
-    .from('pricing_materials')
-    .update(input)
-    .eq('id', id)
-    .select()
-    .single()
+    .from('pricing_materials').update(input).eq('id', id).select().single()
   if (error) throw error
   return data
 }
@@ -321,10 +436,7 @@ export async function deletePricingMaterial(id: string): Promise<void> {
 // ── Pricing Addons ─────────────────────────────────────────────────────────
 
 export async function getPricingAddons(): Promise<PricingAddon[]> {
-  const { data, error } = await supabase
-    .from('pricing_addons')
-    .select('*')
-    .order('name')
+  const { data, error } = await supabase.from('pricing_addons').select('*').order('name')
   if (error) throw error
   return data
 }
@@ -342,11 +454,7 @@ export async function updatePricingAddon(
   input: Partial<Omit<PricingAddon, 'id' | 'created_at'>>
 ): Promise<PricingAddon> {
   const { data, error } = await supabase
-    .from('pricing_addons')
-    .update(input)
-    .eq('id', id)
-    .select()
-    .single()
+    .from('pricing_addons').update(input).eq('id', id).select().single()
   if (error) throw error
   return data
 }
@@ -360,9 +468,7 @@ export async function deletePricingAddon(id: string): Promise<void> {
 
 export async function getNotesByProjectId(projectId: string): Promise<DesignMeetingNote[]> {
   const { data, error } = await supabase
-    .from('design_meeting_notes')
-    .select('*')
-    .eq('project_id', projectId)
+    .from('design_meeting_notes').select('*').eq('project_id', projectId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
@@ -375,8 +481,7 @@ export async function addDesignMeetingNote(
   const { data, error } = await supabase
     .from('design_meeting_notes')
     .insert({ project_id: projectId, notes, attachments: [] })
-    .select()
-    .single()
+    .select().single()
   if (error) throw error
   return data
 }
@@ -390,10 +495,7 @@ export async function deleteNote(id: string): Promise<void> {
 
 export async function getShoppingListByProjectId(projectId: string): Promise<ShoppingListItem[]> {
   const { data, error } = await supabase
-    .from('shopping_list')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('created_at')
+    .from('shopping_list').select('*').eq('project_id', projectId).order('created_at')
   if (error) throw error
   return data
 }
@@ -403,8 +505,7 @@ export async function getAllUnpurchasedShoppingItems(): Promise<ShoppingListItem
     .from('shopping_list')
     .select('*, project:projects(*, customer:customers(*))')
     .eq('purchased', false)
-    .order('project_id')
-    .order('created_at')
+    .order('project_id').order('created_at')
   if (error) throw error
   return data as ShoppingListItem[]
 }
@@ -417,8 +518,7 @@ export async function addShoppingListItem(
   const { data, error } = await supabase
     .from('shopping_list')
     .insert({ project_id: projectId, item, purchased: false, notes: notes ?? null })
-    .select()
-    .single()
+    .select().single()
   if (error) throw error
   return data
 }
@@ -428,11 +528,7 @@ export async function updateShoppingListItem(
   input: Partial<Pick<ShoppingListItem, 'purchased' | 'notes' | 'item'>>
 ): Promise<ShoppingListItem> {
   const { data, error } = await supabase
-    .from('shopping_list')
-    .update(input)
-    .eq('id', id)
-    .select()
-    .single()
+    .from('shopping_list').update(input).eq('id', id).select().single()
   if (error) throw error
   return data
 }

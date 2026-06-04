@@ -207,6 +207,10 @@ export default function QuoteAgentPage() {
           completed: false,
           assigned_to: null,
           notes: null,
+          step_type: (libItem?.step_type ?? 'action') as 'action' | 'waiting',
+          waiting_on: (libItem?.waiting_on ?? null) as import('@/lib/core/types').WaitingOn | null,
+          is_current: i === 0,
+          is_optional: libItem?.is_optional ?? false,
         })
       }
     }
