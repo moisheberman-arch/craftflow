@@ -39,7 +39,23 @@ export interface Project {
   queue_position?: number | null
   requested_addons?: string[]
   primary_material?: string | null
+  width_inches?: number | null
+  height_inches?: number | null
+  depth_inches?: number | null
+  ceiling_height_inches?: number | null
   customer?: Customer
+}
+
+export type CalendarEventType = 'appointment' | 'reminder' | 'milestone' | 'other'
+
+export interface CalendarEvent {
+  id: string
+  created_at: string
+  event_date: string
+  title: string
+  notes: string | null
+  project_id: string | null
+  event_type: CalendarEventType
 }
 
 export interface MaterialItem {

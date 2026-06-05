@@ -14,6 +14,8 @@ import type {
   StepSubtask,
   OpenQuestion,
   QuestionDirectedAt,
+  CalendarEvent,
+  CalendarEventType,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -536,4 +538,111 @@ export async function updateShoppingListItem(
 export async function deleteShoppingListItem(id: string): Promise<void> {
   const { error } = await supabase.from('shopping_list').delete().eq('id', id)
   if (error) throw error
+}
+
+// ── Calendar Events ────────────────────────────────────────────────────────
+
+export async function getCalendarEvents(month: number, year: number): Promise<CalendarEvent[]> {
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+  const endDate = month === 12
+    ? `${year + 1}-01-01`
+    : `${year}-${String(month + 1).padStart(2, '0')}-01`
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .select('*')
+    .gte('event_date', startDate)
+    .lt('event_date', endDate)
+    .order('event_date')
+  if (error) throw error
+  return data
+}
+
+export async function addCalendarEvent(
+  input: Omit<CalendarEvent, 'id' | 'created_at'>
+): Promise<CalendarEvent> {
+  const { data, error } = await supabase.from('calendar_events').insert(input).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateCalendarEvent(
+  id: string,
+  input: Partial<Omit<CalendarEvent, 'id' | 'created_at'>>
+): Promise<CalendarEvent> {
+  const { data, error } = await supabase
+    .from('calendar_events').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  const { error } = await supabase.from('calendar_events').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Delete Project (with cascade) ─────────────────────────────────────────
+
+export async function deleteProject(projectId: string): Promise<void> {
+  // Delete related records (tables without ON DELETE CASCADE)
+  await Promise.all([
+    supabase.from('quotes').delete().eq('project_id', projectId),
+  ])
+  // Main delete — most relations have ON DELETE CASCADE in migration 004+
+  const { error } = await supabase.from('projects').delete().eq('id', projectId)
+  if (error) throw error
+}
+
+export async function getProjectCountByCustomerId(customerId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function deleteCustomer(customerId: string): Promise<void> {
+  const { error } = await supabase.from('customers').delete().eq('id', customerId)
+  if (error) throw error
+}
+
+// ── Shop Task Dashboard ────────────────────────────────────────────────────
+
+export interface ShopTaskProject {
+  project: Project
+  currentStep: ProductionStep
+  openSubtasks: number
+  unresolvedQuestions: number
+  stepAgeHours: number
+}
+
+export async function getShopTaskProjects(): Promise<ShopTaskProject[]> {
+  // Get all active shop projects with their current step
+  const { data: projects, error } = await supabase
+    .from('projects')
+    .select('*, customer:customers(*)')
+    .in('status', ['deposit_received', 'in_production'])
+  if (error) throw error
+
+  const results: ShopTaskProject[] = []
+  await Promise.all((projects ?? []).map(async (p: Project) => {
+    const { data: steps } = await supabase
+      .from('production_steps').select('*').eq('project_id', p.id).eq('is_current', true).single()
+    if (!steps) return
+    const [{ count: subCount }, { count: qCount }] = await Promise.all([
+      supabase.from('step_subtasks').select('id', { count: 'exact', head: true })
+        .eq('step_id', steps.id).eq('completed', false),
+      supabase.from('open_questions').select('id', { count: 'exact', head: true })
+        .eq('project_id', p.id).eq('resolved', false),
+    ])
+    const ageHours = (Date.now() - new Date(steps.created_at).getTime()) / 3600000
+    results.push({
+      project: p as Project,
+      currentStep: steps as ProductionStep,
+      openSubtasks: subCount ?? 0,
+      unresolvedQuestions: qCount ?? 0,
+      stepAgeHours: Math.round(ageHours),
+    })
+  }))
+  return results
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  updateProject, updateCustomer,
+  updateProject, updateCustomer, deleteProject, getProjectCountByCustomerId, deleteCustomer,
   getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial,
   getStepsByProjectId, addStep, updateStep, deleteStep, getStepLibrary, addStepToLibrary,
   getSubtasksByStepId, addSubtask, updateSubtask, deleteSubtask,
@@ -197,16 +197,24 @@ export default function ShopView({ project: initialProject }: { project: Project
 
   const [pType, setPType] = useState<ProjectType | ''>(project.project_type ?? '')
   const [pStatus, setPStatus] = useState<ProjectStatus | ''>(project.status ?? '')
-  const [colorFinish, setColorFinish] = useState(project.required_fields_completed?.color_finish ? '' : '')
   const [colorFinishText, setColorFinishText] = useState('')
-  const [woodSpecies, setWoodSpecies] = useState('')
-  const [dimWidth, setDimWidth] = useState('')
-  const [dimHeight, setDimHeight] = useState('')
-  const [dimDepth, setDimDepth] = useState('')
-  const [ceilingHeight, setCeilingHeight] = useState('')
+  // Fix 1: pre-populate from project data
+  const [woodSpecies, setWoodSpecies] = useState(project.primary_material ?? '')
+  const [dimWidth, setDimWidth] = useState(project.width_inches != null ? String(project.width_inches) : '')
+  const [dimHeight, setDimHeight] = useState(project.height_inches != null ? String(project.height_inches) : '')
+  const [dimDepth, setDimDepth] = useState(project.depth_inches != null ? String(project.depth_inches) : '')
+  const [ceilingHeight, setCeilingHeight] = useState(project.ceiling_height_inches != null ? String(project.ceiling_height_inches) : '')
   const [pNotes, setPNotes] = useState(project.notes ?? '')
   const [savingDetails, setSavingDetails] = useState(false)
   const [detailsSaved, setDetailsSaved] = useState(false)
+
+  // Fix 4: collapsible step list
+  const [stepsExpanded, setStepsExpanded] = useState(false)
+
+  // Fix 3: delete modal
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showDeleteCustomer, setShowDeleteCustomer] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const showCeiling = pType === 'built_in' || pType === 'bookcase'
 
@@ -304,7 +312,7 @@ export default function ShopView({ project: initialProject }: { project: Project
     } finally { setSavingContact(false) }
   }
 
-  // ── Details save ────────────────────────────────────────────────────────
+  // ── Details save — writes primary_material + dimensions back to project ──
   async function saveDetails() {
     setSavingDetails(true)
     try {
@@ -312,6 +320,11 @@ export default function ShopView({ project: initialProject }: { project: Project
         project_type: (pType as ProjectType) || null,
         status: (pStatus as ProjectStatus) || null,
         notes: pNotes || null,
+        primary_material: woodSpecies || null,
+        width_inches: dimWidth ? parseFloat(dimWidth) : null,
+        height_inches: dimHeight ? parseFloat(dimHeight) : null,
+        depth_inches: dimDepth ? parseFloat(dimDepth) : null,
+        ceiling_height_inches: ceilingHeight ? parseFloat(ceilingHeight) : null,
         required_fields_completed: {
           ...project.required_fields_completed,
           color_finish: !!colorFinishText,
@@ -322,6 +335,36 @@ export default function ShopView({ project: initialProject }: { project: Project
       setDetailsSaved(true)
       setTimeout(() => setDetailsSaved(false), 2000)
     } finally { setSavingDetails(false) }
+  }
+
+  // ── Fix 3: Delete project ────────────────────────────────────────────────
+  async function handleDeleteProject() {
+    setDeleting(true)
+    try {
+      await deleteProject(id)
+      const customerId = project.customer_id
+      if (customerId) {
+        const remaining = await getProjectCountByCustomerId(customerId)
+        if (remaining === 0) {
+          setShowDeleteConfirm(false)
+          setShowDeleteCustomer(true)
+          return
+        }
+      }
+      router.push('/dashboard/shop')
+    } catch (err) {
+      alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
+  async function handleDeleteCustomerToo() {
+    if (project.customer_id) {
+      await deleteCustomer(project.customer_id).catch(console.error)
+    }
+    router.push('/dashboard/shop')
   }
 
   // ── Mark Complete & Advance ──────────────────────────────────────────────
@@ -719,6 +762,16 @@ export default function ShopView({ project: initialProject }: { project: Project
               </div>
             )}
           </div>
+
+          {/* Fix 3: Delete project link at bottom of left column */}
+          <div className="pt-1">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-xs text-red-500 hover:text-red-400 transition-colors"
+            >
+              Delete Project
+            </button>
+          </div>
         </div>
 
         {/* ── RIGHT COLUMN ── */}
@@ -775,80 +828,99 @@ export default function ShopView({ project: initialProject }: { project: Project
             )}
           </div>
 
-          {/* Full Step List */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-200">All Steps</h3>
-              <span className="text-xs text-gray-500">{completedCount}/{steps.length} complete</span>
+          {/* Fix 4: Collapsible Step List */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            {/* Collapsible header — always visible */}
+            <button
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-800/50 transition-colors"
+              onClick={() => setStepsExpanded(e => !e)}
+            >
+              <span className="text-sm font-semibold text-gray-200">
+                All Steps — {completedCount}/{steps.length} complete
+              </span>
+              <span className="text-gray-400 text-xs">{stepsExpanded ? '▲' : '▼'}</span>
+            </button>
+
+            {/* Progress bar — always visible */}
+            <div className="h-1 bg-gray-800">
+              <div
+                className="h-full bg-blue-500 transition-all"
+                style={{ width: steps.length > 0 ? `${(completedCount / steps.length) * 100}%` : '0%' }}
+              />
             </div>
 
-            {libPrompt && (
-              <div className="bg-blue-950 border border-blue-800 rounded-lg px-3 py-2 text-xs text-blue-200 flex items-center justify-between mb-3">
-                <span>Save &ldquo;{libPrompt}&rdquo; to library?</span>
-                <div className="flex gap-2 ml-3">
-                  <button onClick={() => saveToLibrary(libPrompt)} className="text-blue-300 hover:text-white font-medium">Yes</button>
-                  <button onClick={() => setLibPrompt(null)} className="text-blue-400 hover:text-white">No</button>
-                </div>
-              </div>
-            )}
+            {/* Expanded content */}
+            {stepsExpanded && (
+              <div className="p-4 pt-3">
+                {libPrompt && (
+                  <div className="bg-blue-950 border border-blue-800 rounded-lg px-3 py-2 text-xs text-blue-200 flex items-center justify-between mb-3">
+                    <span>Save &ldquo;{libPrompt}&rdquo; to library?</span>
+                    <div className="flex gap-2 ml-3">
+                      <button onClick={() => saveToLibrary(libPrompt)} className="text-blue-300 hover:text-white font-medium">Yes</button>
+                      <button onClick={() => setLibPrompt(null)} className="text-blue-400 hover:text-white">No</button>
+                    </div>
+                  </div>
+                )}
 
-            <div className="space-y-1.5">
-              {steps.map((step, idx) => (
-                <div key={step.id} onClick={() => ensureSubtasksLoaded(step.id)}>
-                  <StepRow
-                    step={step}
-                    index={step.sequence_order ?? idx + 1}
-                    isCurrent={step.is_current}
-                    projectId={id}
-                    stepLibrary={stepLibrary}
-                    onToggle={handleToggleStep}
-                    onDelete={async (sid) => { await deleteStep(sid); setSteps(prev => prev.filter(s => s.id !== sid)) }}
-                    onSetCurrent={handleSetCurrent}
-                    subtasksByStep={subtasksByStep}
-                    onSubtasksChange={(stepId, subs) => setSubtasksByStep(prev => ({ ...prev, [stepId]: subs }))}
-                  />
+                <div className="space-y-1.5">
+                  {steps.map((step, idx) => (
+                    <div key={step.id} onClick={() => ensureSubtasksLoaded(step.id)}>
+                      <StepRow
+                        step={step}
+                        index={step.sequence_order ?? idx + 1}
+                        isCurrent={step.is_current}
+                        projectId={id}
+                        stepLibrary={stepLibrary}
+                        onToggle={handleToggleStep}
+                        onDelete={async (sid) => { await deleteStep(sid); setSteps(prev => prev.filter(s => s.id !== sid)) }}
+                        onSetCurrent={handleSetCurrent}
+                        subtasksByStep={subtasksByStep}
+                        onSubtasksChange={(stepId, subs) => setSubtasksByStep(prev => ({ ...prev, [stepId]: subs }))}
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            {!showAddStep ? (
-              <button onClick={() => setShowAddStep(true)}
-                className="mt-3 w-full border border-dashed border-gray-700 hover:border-amber-500/50 text-gray-500 hover:text-amber-400 rounded-lg py-2 text-sm transition-colors">
-                + Add Custom Step
-              </button>
-            ) : (
-              <form onSubmit={handleAddStep} className="mt-3 bg-gray-800 border border-gray-700 rounded-lg p-3 space-y-2">
-                <input type="text" required placeholder="Step name" value={newStepName} onChange={e => setNewStepName(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none" />
-                <div className="flex gap-2">
-                  <select value={newStepType} onChange={e => setNewStepType(e.target.value as StepType)}
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none">
-                    <option value="action">Action</option>
-                    <option value="waiting">Waiting</option>
-                  </select>
-                  {newStepType === 'waiting' && (
-                    <select value={newStepWaiting} onChange={e => setNewStepWaiting(e.target.value as WaitingOn)}
-                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none">
-                      <option value="">Waiting on...</option>
-                      <option value="customer">Customer</option>
-                      <option value="supplier">Supplier</option>
-                      <option value="designer">Designer</option>
-                      <option value="internal">Internal</option>
-                    </select>
-                  )}
-                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
-                    <input type="checkbox" checked={newStepOptional} onChange={e => setNewStepOptional(e.target.checked)} className="accent-amber-500" />
-                    Optional
-                  </label>
-                </div>
-                <div className="flex gap-2">
-                  <button type="submit" disabled={addingStep || !newStepName.trim()}
-                    className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-3 py-1 rounded text-xs">
-                    {addingStep ? '...' : 'Add Step'}
+                {!showAddStep ? (
+                  <button onClick={() => setShowAddStep(true)}
+                    className="mt-3 w-full border border-dashed border-gray-700 hover:border-amber-500/50 text-gray-500 hover:text-amber-400 rounded-lg py-2 text-sm transition-colors">
+                    + Add Custom Step
                   </button>
-                  <button type="button" onClick={() => setShowAddStep(false)} className="text-gray-400 hover:text-white text-xs px-2">Cancel</button>
-                </div>
-              </form>
+                ) : (
+                  <form onSubmit={handleAddStep} className="mt-3 bg-gray-800 border border-gray-700 rounded-lg p-3 space-y-2">
+                    <input type="text" required placeholder="Step name" value={newStepName} onChange={e => setNewStepName(e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none" />
+                    <div className="flex gap-2">
+                      <select value={newStepType} onChange={e => setNewStepType(e.target.value as StepType)}
+                        className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none">
+                        <option value="action">Action</option>
+                        <option value="waiting">Waiting</option>
+                      </select>
+                      {newStepType === 'waiting' && (
+                        <select value={newStepWaiting} onChange={e => setNewStepWaiting(e.target.value as WaitingOn)}
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none">
+                          <option value="">Waiting on...</option>
+                          <option value="customer">Customer</option>
+                          <option value="supplier">Supplier</option>
+                          <option value="designer">Designer</option>
+                          <option value="internal">Internal</option>
+                        </select>
+                      )}
+                      <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                        <input type="checkbox" checked={newStepOptional} onChange={e => setNewStepOptional(e.target.checked)} className="accent-amber-500" />
+                        Optional
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="submit" disabled={addingStep || !newStepName.trim()}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-3 py-1 rounded text-xs">
+                        {addingStep ? '...' : 'Add Step'}
+                      </button>
+                      <button type="button" onClick={() => setShowAddStep(false)} className="text-gray-400 hover:text-white text-xs px-2">Cancel</button>
+                    </div>
+                  </form>
+                )}
+              </div>
             )}
           </div>
 
@@ -914,6 +986,45 @@ export default function ShopView({ project: initialProject }: { project: Project
           </div>
         </div>
       </div>
+
+      {/* ── Fix 3: Delete Project confirmation modals ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <h3 className="font-semibold text-white">Delete Project?</h3>
+            <p className="text-sm text-gray-400">Are you sure you want to delete this project? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={handleDeleteProject} disabled={deleting}
+                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">
+                {deleting ? 'Deleting...' : 'Delete Project'}
+              </button>
+              <button onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteCustomer && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <h3 className="font-semibold text-white">Delete Customer Too?</h3>
+            <p className="text-sm text-gray-400">
+              This customer has no other projects. Do you want to delete the customer record as well?
+            </p>
+            <div className="flex gap-3">
+              <button onClick={handleDeleteCustomerToo}
+                className="flex-1 bg-red-700 hover:bg-red-600 text-white font-semibold py-2 rounded-lg text-sm">
+                Yes, Delete Customer
+              </button>
+              <button onClick={() => router.push('/dashboard/shop')}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 rounded-lg text-sm">
+                No, Keep Customer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

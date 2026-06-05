@@ -151,10 +151,16 @@ export default function ShopDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Shop Dashboard</h1>
-        <Link href="/dashboard/shop/shopping-list"
-          className="text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-200 px-4 py-2 rounded-lg transition-colors font-medium">
-          🛒 Shopping List
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/shop/tasks"
+            className="text-sm bg-blue-800 hover:bg-blue-700 text-blue-200 px-4 py-2 rounded-lg transition-colors font-medium">
+            ✓ Tasks
+          </Link>
+          <Link href="/dashboard/shop/shopping-list"
+            className="text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-200 px-4 py-2 rounded-lg transition-colors font-medium">
+            🛒 Shopping List
+          </Link>
+        </div>
       </div>
 
       {/* Section 1: Pending Questions */}

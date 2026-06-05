@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ShopView from './ShopView'
 import { seedDefaultStepsIfEmpty } from '@/lib/api/supabase-client'
@@ -12,7 +12,7 @@ import {
   getStepLibrary, addStepToLibrary,
   getQuoteByProjectId,
   getNotesByProjectId, addDesignMeetingNote, deleteNote,
-  getPricingAddons,
+  getPricingAddons, deleteProject, getProjectCountByCustomerId, deleteCustomer,
 } from '@/lib/api/supabase-client'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
@@ -81,6 +81,7 @@ export default function ProjectDetailPage() {
     ? ['overview', 'materials', 'steps', 'quote']
     : ['overview', 'materials', 'quote']
 
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('overview')
   const [project, setProject] = useState<Project | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -93,6 +94,9 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showDeleteCustomer, setShowDeleteCustomer] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Pricing addons (for preferences checklist)
   const [pricingAddons, setPricingAddons] = useState<PricingAddon[]>([])
@@ -291,6 +295,36 @@ export default function ProjectDetailPage() {
     setDesignNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
+  // Fix 3: Delete project handlers
+  async function handleDeleteProject() {
+    if (!project) return
+    setDeleting(true)
+    try {
+      await deleteProject(project.id)
+      if (project.customer_id) {
+        const remaining = await getProjectCountByCustomerId(project.customer_id)
+        if (remaining === 0) {
+          setShowDeleteConfirm(false)
+          setShowDeleteCustomer(true)
+          return
+        }
+      }
+      router.push(isShopView ? '/dashboard/shop' : '/dashboard/sales')
+    } catch (err) {
+      alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
+  async function handleDeleteCustomerToo() {
+    if (project?.customer_id) {
+      await deleteCustomer(project.customer_id).catch(console.error)
+    }
+    router.push(isShopView ? '/dashboard/shop' : '/dashboard/sales')
+  }
+
   if (loading) return <div className="text-center py-8 text-gray-500">Loading...</div>
   if (error || !project) return (
     <div className="text-center py-8">
@@ -448,10 +482,17 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <button onClick={saveOverview} disabled={saving}
-            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-5 py-2 rounded-lg transition-colors text-sm">
-            {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
-          </button>
+          <div className="flex items-center justify-between">
+            <button onClick={saveOverview} disabled={saving}
+              className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-5 py-2 rounded-lg transition-colors text-sm">
+              {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
+            </button>
+            {/* Fix 3: Delete project link */}
+            <button onClick={() => setShowDeleteConfirm(true)}
+              className="text-xs text-red-500 hover:text-red-400 transition-colors">
+              Delete Project
+            </button>
+          </div>
         </div>
       )}
 
@@ -668,6 +709,42 @@ export default function ProjectDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Fix 3: Delete confirmation modals */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <h3 className="font-semibold text-white">Delete Project?</h3>
+            <p className="text-sm text-gray-400">Are you sure you want to delete this project? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={handleDeleteProject} disabled={deleting}
+                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">
+                {deleting ? 'Deleting...' : 'Delete Project'}
+              </button>
+              <button onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteCustomer && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <h3 className="font-semibold text-white">Delete Customer Too?</h3>
+            <p className="text-sm text-gray-400">This customer has no other projects. Do you want to delete the customer record as well?</p>
+            <div className="flex gap-3">
+              <button onClick={handleDeleteCustomerToo}
+                className="flex-1 bg-red-700 hover:bg-red-600 text-white font-semibold py-2 rounded-lg text-sm">
+                Yes, Delete Customer
+              </button>
+              <button onClick={() => router.push(isShopView ? '/dashboard/shop' : '/dashboard/sales')}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 rounded-lg text-sm">
+                No, Keep Customer
+              </button>
+            </div>
           </div>
         </div>
       )}
