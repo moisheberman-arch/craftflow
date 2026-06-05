@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   getProjects, createProject, getCustomers, createCustomer,
-  updateCustomer, getProjectsByCustomerId,
+  updateCustomer, getProjectsByCustomerId, updateProject,
+  getPricingAddons,
 } from '@/lib/api/supabase-client'
 import { supabase } from '@/lib/supabase'
-import type { Project, ProjectStatus, Customer } from '@/lib/core/types'
+import type { Project, ProjectStatus, Customer, ProjectType, PricingAddon } from '@/lib/core/types'
+
+// ── Status config ──────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   lead: 'Lead',
@@ -22,6 +24,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   completed: 'Completed',
 }
 
+// Sales-visible pipeline stages (not shop/completed)
 const SALES_SECTIONS: ProjectStatus[] = [
   'lead',
   'tentative_quote_sent',
@@ -32,18 +35,34 @@ const SALES_SECTIONS: ProjectStatus[] = [
   'deposit_received',
 ]
 
-// ── Customer Modal ──────────────────────────────────────────────────────────
+const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
+
+// Badge colours per status (used in dropdown styling)
+const STATUS_COLORS: Record<ProjectStatus, string> = {
+  lead:                     'bg-gray-700 text-gray-200',
+  tentative_quote_sent:     'bg-slate-700 text-slate-200',
+  design_meeting_scheduled: 'bg-blue-900 text-blue-200',
+  post_design_meeting:      'bg-indigo-900 text-indigo-200',
+  rendering_in_progress:    'bg-purple-900 text-purple-200',
+  final_quote_issued:       'bg-yellow-900 text-yellow-200',
+  deposit_received:         'bg-green-900 text-green-200',
+  in_production:            'bg-orange-900 text-orange-200',
+  completed:                'bg-emerald-900 text-emerald-200',
+}
+
+// ── Customers Modal ────────────────────────────────────────────────────────
 
 type CustModalState = 'list' | 'detail' | 'form'
 
 function CustomersModal({
   onClose,
   onCustomersChanged,
+  onNavigate,
 }: {
   onClose: () => void
   onCustomersChanged: (customers: Customer[]) => void
+  onNavigate: (path: string) => void
 }) {
-  const router = useRouter()
   const [state, setState] = useState<CustModalState>('list')
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
@@ -52,8 +71,6 @@ function CustomersModal({
   const [customerProjects, setCustomerProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-
-  // Form state
   const [formName, setFormName] = useState('')
   const [formPhone, setFormPhone] = useState('')
   const [formEmail, setFormEmail] = useState('')
@@ -74,7 +91,7 @@ function CustomersModal({
     (c.phone ?? '').includes(search)
   )
 
-  async function openDetail(c: Customer) {
+  function openDetail(c: Customer) {
     setSelectedCustomer(c)
     setState('detail')
     setLoadingProjects(true)
@@ -93,10 +110,8 @@ function CustomersModal({
 
   function openEdit(c: Customer) {
     setEditingId(c.id)
-    setFormName(c.name)
-    setFormPhone(c.phone ?? '')
-    setFormEmail(c.email ?? '')
-    setFormAddress(c.address ?? '')
+    setFormName(c.name); setFormPhone(c.phone ?? '')
+    setFormEmail(c.email ?? ''); setFormAddress(c.address ?? '')
     setFormError('')
     setState('form')
   }
@@ -117,24 +132,18 @@ function CustomersModal({
     try {
       if (editingId) {
         const updated = await updateCustomer(editingId, {
-          name: formName,
-          phone: formPhone || null,
-          email: formEmail || null,
-          address: formAddress || null,
+          name: formName, phone: formPhone || null,
+          email: formEmail || null, address: formAddress || null,
         })
         const next = customers.map(c => c.id === editingId ? updated : c)
-        setCustomers(next)
-        onCustomersChanged(next)
+        setCustomers(next); onCustomersChanged(next)
       } else {
         const newC = await createCustomer({
-          name: formName,
-          phone: formPhone || null,
-          email: formEmail || null,
-          address: formAddress || null,
+          name: formName, phone: formPhone || null,
+          email: formEmail || null, address: formAddress || null,
         })
         const next = [...customers, newC].sort((a, b) => a.name.localeCompare(b.name))
-        setCustomers(next)
-        onCustomersChanged(next)
+        setCustomers(next); onCustomersChanged(next)
       }
       setState('list')
     } catch (err) {
@@ -154,12 +163,7 @@ function CustomersModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
           <div className="flex items-center gap-3">
             {state !== 'list' && (
-              <button
-                onClick={() => setState('list')}
-                className="text-gray-400 hover:text-white text-sm"
-              >
-                ← Back
-              </button>
+              <button onClick={() => setState('list')} className="text-gray-400 hover:text-white text-sm">← Back</button>
             )}
             <h2 className="font-semibold text-white">
               {state === 'list' && 'Customers'}
@@ -169,77 +173,64 @@ function CustomersModal({
           </div>
           <div className="flex items-center gap-3">
             {state === 'list' && (
-              <button
-                onClick={openNew}
-                className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg text-sm"
-              >
+              <button onClick={openNew}
+                className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg text-sm">
                 + New Customer
               </button>
             )}
             {state === 'detail' && (
-              <button
-                onClick={() => selectedCustomer && openEdit(selectedCustomer)}
-                className="text-sm text-amber-400 hover:text-amber-300"
-              >
-                Edit
-              </button>
+              <button onClick={() => selectedCustomer && openEdit(selectedCustomer)}
+                className="text-sm text-amber-400 hover:text-amber-300">Edit</button>
             )}
             <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
           </div>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto">
-          {/* ── State 1: Customer List ── */}
+          {/* ── List ── */}
           {state === 'list' && (
             <div className="p-4">
-              <input
-                type="text"
-                placeholder="Search customers..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
+              <input placeholder="Search customers..." value={search} onChange={e => setSearch(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:ring-1 focus:ring-amber-500" />
               {loading ? (
                 <div className="text-center py-8 text-gray-500">Loading...</div>
               ) : filtered.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">No customers found</div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="px-3 py-2 text-left text-gray-400 font-medium">Name</th>
-                      <th className="px-3 py-2 text-left text-gray-400 font-medium">Phone</th>
-                      <th className="px-3 py-2 text-left text-gray-400 font-medium">Email</th>
-                      <th className="px-3 py-2 text-right text-gray-400 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(c => (
-                      // Fix 1: entire row clickable — action buttons stop propagation
-                      <tr
-                        key={c.id}
-                        onClick={() => openDetail(c)}
-                        className="border-b border-gray-800 last:border-0 hover:bg-gray-800/40 cursor-pointer"
+                /* Fix 2: Use divs instead of table so row clicks are completely reliable */
+                <div className="space-y-0.5">
+                  {/* Header row */}
+                  <div className="grid grid-cols-[1fr_120px_160px_80px] px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-800">
+                    <span>Name</span><span>Phone</span><span>Email</span><span className="text-right">Actions</span>
+                  </div>
+                  {filtered.map(c => (
+                    <div
+                      key={c.id}
+                      className="grid grid-cols-[1fr_120px_160px_80px] items-center px-3 py-3 rounded-lg hover:bg-gray-800/60 cursor-pointer border-b border-gray-800/50 last:border-0 group"
+                      onClick={() => openDetail(c)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDetail(c) }}
+                    >
+                      <span className="text-sm font-medium text-white">{c.name}</span>
+                      <span className="text-sm text-gray-400">{c.phone ?? '—'}</span>
+                      <span className="text-sm text-gray-400 truncate">{c.email ?? '—'}</span>
+                      {/* Fix 2: action buttons stop propagation */}
+                      <div
+                        className="flex items-center justify-end gap-3"
+                        onClick={e => e.stopPropagation()}
                       >
-                        <td className="px-3 py-3 font-medium">{c.name}</td>
-                        <td className="px-3 py-3 text-gray-400">{c.phone ?? '—'}</td>
-                        <td className="px-3 py-3 text-gray-400">{c.email ?? '—'}</td>
-                        <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-3">
-                            <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-white text-xs">Edit</button>
-                            <button onClick={() => handleDeleteCustomer(c.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-white text-xs">Edit</button>
+                        <button onClick={() => handleDeleteCustomer(c.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
 
-          {/* ── State 2: Customer Detail ── */}
+          {/* ── Detail ── */}
           {state === 'detail' && selectedCustomer && (
             <div className="p-6 space-y-5">
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -256,18 +247,12 @@ function CustomersModal({
                 ) : (
                   <div className="space-y-2">
                     {customerProjects.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => { onClose(); router.push(`/dashboard/projects/${p.id}?view=sales`) }}
-                        className="w-full text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg px-4 py-3 transition-colors"
-                      >
+                      <button key={p.id}
+                        onClick={() => { onClose(); onNavigate(`/dashboard/projects/${p.id}?view=sales`) }}
+                        className="w-full text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg px-4 py-3 transition-colors">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium capitalize">
-                            {p.project_type?.replace(/_/g, ' ') ?? 'New Project'}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {p.status ? STATUS_LABELS[p.status] : '—'}
-                          </span>
+                          <span className="text-sm font-medium capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'New Project'}</span>
+                          <span className="text-xs text-gray-400">{p.status ? STATUS_LABELS[p.status] : '—'}</span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{new Date(p.updated_at).toLocaleDateString()}</p>
                       </button>
@@ -278,7 +263,7 @@ function CustomersModal({
             </div>
           )}
 
-          {/* ── State 3: New / Edit Form ── */}
+          {/* ── Form ── */}
           {state === 'form' && (
             <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -319,7 +304,268 @@ function CustomersModal({
   )
 }
 
-// ── Sales Dashboard ─────────────────────────────────────────────────────────
+// ── New Project Modal (multi-step, no navigation) ──────────────────────────
+
+type NewProjectStep = 'customer' | 'details'
+
+function NewProjectModal({
+  customers,
+  onClose,
+  onCreated,
+}: {
+  customers: Customer[]
+  onClose: () => void
+  onCreated: (project: Project, newCustomer?: Customer) => void
+}) {
+  const [step, setStep] = useState<NewProjectStep>('customer')
+  const [mode, setMode] = useState<'existing' | 'new'>('existing')
+
+  // Step 1 — customer
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newAddress, setNewAddress] = useState('')
+
+  // Step 2 — project details
+  const [projectType, setProjectType] = useState<ProjectType | ''>('')
+  const [address, setAddress] = useState('')
+  const [notes, setNotes] = useState('')
+  const [primaryMaterial, setPrimaryMaterial] = useState('')
+
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
+
+  function canProceedStep1() {
+    if (mode === 'existing') return true // customer optional
+    return !!newName.trim()
+  }
+
+  function handleNext(e: React.FormEvent) {
+    e.preventDefault()
+    if (!canProceedStep1()) return
+    // Pre-fill address from customer if selecting existing
+    if (mode === 'existing' && selectedCustomerId) {
+      const found = customers.find(c => c.id === selectedCustomerId)
+      if (found?.address) setAddress(found.address)
+    } else if (mode === 'new' && newAddress) {
+      setAddress(newAddress)
+    }
+    setStep('details')
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault()
+    setCreating(true)
+    setError('')
+    try {
+      let customerId: string | null = null
+      let newCustomer: Customer | undefined
+
+      if (mode === 'existing') {
+        customerId = selectedCustomerId || null
+      } else {
+        newCustomer = await createCustomer({
+          name: newName,
+          phone: newPhone || null,
+          email: newEmail || null,
+          address: newAddress || null,
+        })
+        customerId = newCustomer.id
+      }
+
+      const project = await createProject({
+        customer_id: customerId,
+        project_type: (projectType as ProjectType) || null,
+        status: 'lead',
+        address: address || null,
+        notes: notes || null,
+        primary_material: primaryMaterial || null,
+        requested_addons: [],
+        required_fields_completed: {
+          customer_info: !!customerId,
+          project_type: !!projectType,
+          color_finish: false,
+          quote_issued: false,
+        },
+      })
+
+      onCreated(project, newCustomer)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+          <div className="flex items-center gap-3">
+            {step === 'details' && (
+              <button onClick={() => setStep('customer')} className="text-gray-400 hover:text-white text-sm">← Back</button>
+            )}
+            <h2 className="font-semibold text-white">
+              {step === 'customer' ? 'New Project — Customer' : 'New Project — Details'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Step indicator */}
+            <div className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${step === 'customer' ? 'bg-amber-500' : 'bg-gray-600'}`} />
+              <span className={`w-2 h-2 rounded-full ${step === 'details' ? 'bg-amber-500' : 'bg-gray-600'}`} />
+            </div>
+            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+          </div>
+        </div>
+
+        {/* Step 1: Customer */}
+        {step === 'customer' && (
+          <form onSubmit={handleNext} className="p-5 space-y-4">
+            <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+              <button type="button" onClick={() => setMode('existing')}
+                className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'existing' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>
+                Select Existing
+              </button>
+              <button type="button" onClick={() => setMode('new')}
+                className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'new' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>
+                Create New
+              </button>
+            </div>
+
+            {mode === 'existing' ? (
+              <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <option value="">— No customer yet —</option>
+                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            ) : (
+              <div className="space-y-2">
+                <input required placeholder="Full name *" value={newName} onChange={e => setNewName(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                <input placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                <input placeholder="Email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                <input placeholder="Address" value={newAddress} onChange={e => setNewAddress(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button type="submit" disabled={mode === 'new' && !newName.trim()}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+                Next →
+              </button>
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {/* Step 2: Project Details */}
+        {step === 'details' && (
+          <form onSubmit={handleCreate} className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Project Type</label>
+                <select value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  <option value="">— Select type —</option>
+                  {PROJECT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Primary Material</label>
+                <select value={primaryMaterial} onChange={e => setPrimaryMaterial(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  <option value="">— Select material —</option>
+                  {['Maple', 'Walnut', 'Oak', 'Cherry', 'Painted MDF', 'Other'].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Address</label>
+                <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Job site address"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Any initial notes..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none" />
+              </div>
+            </div>
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button type="submit" disabled={creating}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+                {creating ? 'Creating...' : 'Create Project'}
+              </button>
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Inline Status Badge Dropdown ───────────────────────────────────────────
+
+function StatusBadgeSelect({
+  projectId,
+  currentStatus,
+  onStatusChanged,
+}: {
+  projectId: string
+  currentStatus: ProjectStatus | null
+  onStatusChanged: (id: string, newStatus: ProjectStatus) => void
+}) {
+  const [saving, setSaving] = useState(false)
+
+  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    e.stopPropagation()
+    const newStatus = e.target.value as ProjectStatus
+    if (!newStatus || newStatus === currentStatus) return
+    setSaving(true)
+    try {
+      await updateProject(projectId, { status: newStatus })
+      onStatusChanged(projectId, newStatus)
+    } catch (err) {
+      console.error('Status update failed', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const colorClass = currentStatus ? STATUS_COLORS[currentStatus] : 'bg-gray-700 text-gray-300'
+
+  return (
+    <div className="relative inline-block" onClick={e => e.stopPropagation()}>
+      <select
+        value={currentStatus ?? ''}
+        onChange={handleChange}
+        disabled={saving}
+        className={`appearance-none text-xs font-semibold px-2.5 py-1 rounded-full pr-6 cursor-pointer border-0 focus:outline-none focus:ring-1 focus:ring-white/30 disabled:opacity-60 ${colorClass}`}
+        style={{ backgroundImage: 'none' }}
+        title="Change status"
+      >
+        {SALES_SECTIONS.map(s => (
+          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+        ))}
+      </select>
+      {/* Caret icon */}
+      <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] opacity-70">▾</span>
+    </div>
+  )
+}
+
+// ── Sales Dashboard ────────────────────────────────────────────────────────
 
 export default function SalesDashboard() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -327,16 +573,7 @@ export default function SalesDashboard() {
   const [loading, setLoading] = useState(true)
   const [showNewProject, setShowNewProject] = useState(false)
   const [showCustomers, setShowCustomers] = useState(false)
-  const [creating, setCreating] = useState(false)
-
-  const [mode, setMode] = useState<'existing' | 'new'>('existing')
-  const [selectedCustomerId, setSelectedCustomerId] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newAddress, setNewAddress] = useState('')
-
-  const router = useRouter()
+  const [navigateTo, setNavigateTo] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([getProjects(), getCustomers()])
@@ -345,153 +582,69 @@ export default function SalesDashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  function resetNewProject() {
-    setMode('existing')
-    setSelectedCustomerId('')
-    setNewName(''); setNewPhone(''); setNewEmail(''); setNewAddress('')
+  // Customer modal navigates by setting state, then we use Link or window
+  useEffect(() => {
+    if (navigateTo) {
+      window.location.href = navigateTo
+    }
+  }, [navigateTo])
+
+  // Fix 1: project created inside modal — just prepend to list, no navigation
+  function handleProjectCreated(project: Project, newCustomer?: Customer) {
+    // Attach customer info so it renders correctly in the table
+    const withCustomer: Project = {
+      ...project,
+      customer: newCustomer ?? customers.find(c => c.id === project.customer_id),
+    }
+    setProjects(prev => [withCustomer, ...prev])
+    if (newCustomer) {
+      setCustomers(prev => [...prev, newCustomer].sort((a, b) => a.name.localeCompare(b.name)))
+    }
+    setShowNewProject(false)
   }
 
-  async function handleCreateProject(e: React.FormEvent) {
-    e.preventDefault()
-    setCreating(true)
-    try {
-      let customerId: string | null = null
-      let projectAddress: string | null = null
-
-      if (mode === 'existing') {
-        customerId = selectedCustomerId || null
-        // Pull address from selected customer
-        const found = customers.find(c => c.id === customerId)
-        projectAddress = found?.address ?? null
-      } else {
-        // Fix 1: create customer, then copy address to project
-        const customer = await createCustomer({
-          name: newName,
-          phone: newPhone || null,
-          email: newEmail || null,
-          address: newAddress || null,
-        })
-        customerId = customer.id
-        projectAddress = newAddress || null
-        setCustomers(prev => [...prev, customer].sort((a, b) => a.name.localeCompare(b.name)))
-      }
-
-      const p = await createProject({
-        customer_id: customerId,
-        project_type: null,
-        status: 'lead',
-        address: projectAddress,          // Fix 1: address flows through
-        notes: null,
-        required_fields_completed: {
-          customer_info: !!customerId,
-          project_type: false,
-          color_finish: false,
-          quote_issued: false,
-        },
-      })
-
-      setProjects(prev => [p, ...prev])
-      setShowNewProject(false)
-      resetNewProject()
-      router.push(`/dashboard/projects/${p.id}?view=sales`)
-    } finally {
-      setCreating(false)
-    }
+  // Fix 3: inline status change — update state so project re-groups instantly
+  function handleStatusChanged(projectId: string, newStatus: ProjectStatus) {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status: newStatus } : p))
   }
 
   const byStatus = (status: ProjectStatus) =>
-    projects.filter(p => p.status === status).sort(
-      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    )
+    projects.filter(p => p.status === status)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
 
   const salesProjects = projects.filter(p => SALES_SECTIONS.includes(p.status as ProjectStatus))
 
   return (
     <div>
-      {/* Fix 2: Customers modal */}
       {showCustomers && (
         <CustomersModal
           onClose={() => setShowCustomers(false)}
           onCustomersChanged={setCustomers}
+          onNavigate={path => { setShowCustomers(false); setNavigateTo(path) }}
+        />
+      )}
+
+      {showNewProject && (
+        <NewProjectModal
+          customers={customers}
+          onClose={() => setShowNewProject(false)}
+          onCreated={handleProjectCreated}
         />
       )}
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Sales Dashboard</h1>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowCustomers(true)}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
-          >
+          <button onClick={() => setShowCustomers(true)}
+            className="text-sm text-gray-400 hover:text-white transition-colors">
             Customers
           </button>
-          <button
-            onClick={() => setShowNewProject(true)}
-            className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
-          >
+          <button onClick={() => setShowNewProject(true)}
+            className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg transition-colors text-sm">
             + New Project
           </button>
         </div>
       </div>
-
-      {/* New Project modal */}
-      {showNewProject && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          onClick={e => { if (e.target === e.currentTarget) { setShowNewProject(false); resetNewProject() } }}
-        >
-          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-              <h2 className="font-semibold text-white">New Project</h2>
-              <button onClick={() => { setShowNewProject(false); resetNewProject() }}
-                className="text-gray-500 hover:text-white text-xl leading-none">×</button>
-            </div>
-            <form onSubmit={handleCreateProject} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Customer</label>
-                <div className="flex gap-1 bg-gray-800 rounded-lg p-1 mb-3">
-                  <button type="button" onClick={() => setMode('existing')}
-                    className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'existing' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>
-                    Select Existing
-                  </button>
-                  <button type="button" onClick={() => setMode('new')}
-                    className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'new' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>
-                    Create New
-                  </button>
-                </div>
-                {mode === 'existing' ? (
-                  <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
-                    <option value="">— No customer yet —</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                ) : (
-                  <div className="space-y-2">
-                    <input required placeholder="Full name *" value={newName} onChange={e => setNewName(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                    <input placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                    <input placeholder="Email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                    <input placeholder="Address" value={newAddress} onChange={e => setNewAddress(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={creating || (mode === 'new' && !newName)}
-                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
-                  {creating ? 'Creating...' : 'Create Project'}
-                </button>
-                <button type="button" onClick={() => { setShowNewProject(false); resetNewProject() }}
-                  className="px-4 py-2 text-sm text-gray-400 hover:text-white">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {loading ? (
         <div className="text-center text-gray-500 py-8">Loading...</div>
@@ -512,25 +665,39 @@ export default function SalesDashboard() {
                       <tr className="border-b border-gray-800 text-left">
                         <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</th>
                         <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Project Type</th>
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Last Updated</th>
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Actions</th>
+                        {/* Fix 3: status column header */}
+                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
+                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Updated</th>
+                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Open</th>
                       </tr>
                     </thead>
                     <tbody>
                       {group.map(project => (
-                        <tr key={project.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50">
+                        <tr key={project.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/40">
                           <td className="px-4 py-3 text-sm font-medium">
                             {project.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-300 capitalize">
                             {project.project_type?.replace(/_/g, ' ') ?? <span className="text-gray-500 italic">—</span>}
                           </td>
+                          {/* Fix 3: inline status badge-dropdown */}
+                          <td className="px-4 py-3">
+                            <StatusBadgeSelect
+                              projectId={project.id}
+                              currentStatus={project.status}
+                              onStatusChanged={handleStatusChanged}
+                            />
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-400">
                             {new Date(project.updated_at).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-3">
-                            <Link href={`/dashboard/projects/${project.id}?view=sales`}
-                              className="text-sm text-amber-400 hover:text-amber-300">View</Link>
+                            <Link
+                              href={`/dashboard/projects/${project.id}?view=sales`}
+                              className="text-sm text-amber-400 hover:text-amber-300"
+                            >
+                              View →
+                            </Link>
                           </td>
                         </tr>
                       ))}
