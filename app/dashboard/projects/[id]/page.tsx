@@ -350,6 +350,13 @@ export default function ProjectDetailPage() {
         >
           ← {isShopView ? 'Shop' : 'Sales'}
         </Link>
+        <button
+          onClick={() => window.open(`/dashboard/projects/${id}/print`, '_blank')}
+          className="text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-2.5 py-1 rounded transition-colors"
+          title="Print Job Sheet"
+        >
+          🖨 Print
+        </button>
         <h1 className="text-xl font-bold">
           {project.customer?.name ?? 'New Project'}
           {project.project_type && (

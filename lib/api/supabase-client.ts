@@ -16,6 +16,8 @@ import type {
   QuestionDirectedAt,
   CalendarEvent,
   CalendarEventType,
+  Touchup,
+  TouchupStatus,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -603,6 +605,65 @@ export async function getProjectCountByCustomerId(customerId: string): Promise<n
 
 export async function deleteCustomer(customerId: string): Promise<void> {
   const { error } = await supabase.from('customers').delete().eq('id', customerId)
+  if (error) throw error
+}
+
+// ── Touchups ───────────────────────────────────────────────────────────────
+
+export async function getTouchups(): Promise<Touchup[]> {
+  const { data, error } = await supabase
+    .from('touchups')
+    .select('*, project:projects(*, customer:customers(*)), customer:customers(*)')
+    .order('priority', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as Touchup[]
+}
+
+export async function getTouchupsByStatus(status: TouchupStatus): Promise<Touchup[]> {
+  const { data, error } = await supabase
+    .from('touchups')
+    .select('*, project:projects(*, customer:customers(*)), customer:customers(*)')
+    .eq('status', status)
+    .order('priority', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as Touchup[]
+}
+
+export async function getOpenTouchups(): Promise<Touchup[]> {
+  const { data, error } = await supabase
+    .from('touchups')
+    .select('*, project:projects(*, customer:customers(*)), customer:customers(*)')
+    .in('status', ['open', 'in_progress'])
+    .order('priority', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as Touchup[]
+}
+
+export async function createTouchup(
+  input: Omit<Touchup, 'id' | 'created_at' | 'updated_at' | 'project' | 'customer'>
+): Promise<Touchup> {
+  const { data, error } = await supabase.from('touchups').insert(input).select().single()
+  if (error) throw error
+  return data as Touchup
+}
+
+export async function updateTouchup(
+  id: string,
+  input: Partial<Omit<Touchup, 'id' | 'created_at' | 'project' | 'customer'>>
+): Promise<Touchup> {
+  const { data, error } = await supabase
+    .from('touchups')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', id).select().single()
+  if (error) throw error
+  return data as Touchup
+}
+
+export async function deleteTouchup(id: string): Promise<void> {
+  const { error } = await supabase.from('touchups').delete().eq('id', id)
   if (error) throw error
 }
 

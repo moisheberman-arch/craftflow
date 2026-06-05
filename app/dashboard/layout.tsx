@@ -2,14 +2,24 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { getOpenTouchups } from '@/lib/api/supabase-client'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [urgentCount, setUrgentCount] = useState(0)
 
   const isSales = pathname.startsWith('/dashboard/sales') || pathname.startsWith('/dashboard/customers')
   const isShop = pathname.startsWith('/dashboard/shop')
   const isSettings = pathname.startsWith('/dashboard/settings')
+  const isTouchups = pathname.startsWith('/dashboard/touchups')
+
+  useEffect(() => {
+    getOpenTouchups()
+      .then(items => setUrgentCount(items.filter(t => t.priority === 'urgent').length))
+      .catch(() => {})
+  }, [pathname])
 
   async function handleLogout() {
     await fetch('/api/logout')
@@ -43,6 +53,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/touchups"
+            className={`text-sm transition-colors flex items-center gap-1.5 ${
+              isTouchups ? 'text-amber-400' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Touch-Ups
+            {urgentCount > 0 && (
+              <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {urgentCount}
+              </span>
+            )}
+          </Link>
           <Link
             href="/dashboard/settings/pricing"
             className={`text-sm transition-colors ${

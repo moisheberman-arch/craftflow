@@ -204,3 +204,24 @@ export interface ShoppingListItem {
   notes: string | null
   project?: Project
 }
+
+export type TouchupStatus = 'open' | 'in_progress' | 'done'
+export type TouchupPriority = 'normal' | 'urgent'
+
+export interface Touchup {
+  id: string
+  created_at: string
+  updated_at: string
+  description: string
+  assigned_to: string | null
+  address: string | null
+  project_id: string | null
+  customer_id: string | null
+  status: TouchupStatus
+  priority: TouchupPriority
+  notes: string | null
+  completed_at: string | null
+  // joined
+  project?: Project
+  customer?: Customer
+}

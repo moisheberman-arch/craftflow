@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   getShopTaskProjects, getCalendarEvents, addCalendarEvent, deleteCalendarEvent,
+  getOpenTouchups,
   type ShopTaskProject,
 } from '@/lib/api/supabase-client'
-import type { CalendarEvent, CalendarEventType } from '@/lib/core/types'
+import type { CalendarEvent, CalendarEventType, Touchup } from '@/lib/core/types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -244,6 +245,7 @@ function TaskCard({ task }: { task: ShopTaskProject }) {
 
 export default function ShopTasksPage() {
   const [tasks, setTasks] = useState<ShopTaskProject[]>([])
+  const [touchups, setTouchups] = useState<Touchup[]>([])
   const [loading, setLoading] = useState(true)
   const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1)
   const [calYear, setCalYear] = useState(new Date().getFullYear())
@@ -251,10 +253,13 @@ export default function ShopTasksPage() {
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null)
 
   useEffect(() => {
-    getShopTaskProjects()
-      .then(setTasks)
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    Promise.all([
+      getShopTaskProjects().catch(() => [] as ShopTaskProject[]),
+      getOpenTouchups().catch(() => [] as Touchup[]),
+    ]).then(([t, tu]) => {
+      setTasks(t)
+      setTouchups(tu)
+    }).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -325,6 +330,41 @@ export default function ShopTasksPage() {
                 )}
                 <div className="space-y-3">
                   {waitingTasks.map(t => <TaskCard key={t.project.id} task={t} />)}
+                </div>
+              </div>
+            )}
+
+            {/* Section 3: Open Touch-Ups */}
+            {touchups.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 rounded-full bg-yellow-400" />
+                  <h2 className="font-semibold text-white text-sm">Open Touch-Ups</h2>
+                  <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{touchups.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {touchups.map(t => (
+                    <div key={t.id} className={`bg-gray-900 border rounded-xl px-4 py-3 ${t.priority === 'urgent' ? 'border-red-700' : 'border-gray-800'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            {t.priority === 'urgent' && (
+                              <span className="text-[10px] font-semibold bg-red-800 text-red-200 px-1.5 py-0.5 rounded uppercase">Urgent</span>
+                            )}
+                            <span className="text-sm font-semibold text-white leading-snug">{t.description}</span>
+                          </div>
+                          {t.assigned_to && <p className="text-xs text-gray-400">Assigned: {t.assigned_to}</p>}
+                          {t.address && <p className="text-xs text-gray-500 mt-0.5">📍 {t.address}</p>}
+                        </div>
+                        <span className="text-xs text-gray-600 shrink-0">{formatAge(t.created_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <Link href="/dashboard/touchups" className="text-xs text-amber-400 hover:text-amber-300">
+                    Go to Touch-Ups →
+                  </Link>
                 </div>
               </div>
             )}
