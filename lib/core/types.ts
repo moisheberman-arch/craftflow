@@ -7,7 +7,7 @@ export interface Customer {
   address: string | null
 }
 
-export type ProjectType = 'dining_table' | 'built_in' | 'bookcase' | 'buffet' | 'other'
+export type ProjectType = 'dining_table' | 'built_in' | 'bookcase' | 'buffet' | 'bar' | 'desk' | 'other'
 export type ProjectStatus =
   | 'lead'
   | 'tentative_quote_sent'
