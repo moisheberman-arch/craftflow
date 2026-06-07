@@ -31,15 +31,10 @@ function getWaitingColor(waitingOn: string | null): string {
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
-// ── Calendar ───────────────────────────────────────────────────────────────
+// ── Mini Calendar ──────────────────────────────────────────────────────────
 
 function MiniCalendar({
-  events,
-  month,
-  year,
-  onMonthChange,
-  onAddEvent,
-  onDeleteEvent,
+  events, month, year, onMonthChange, onAddEvent, onDeleteEvent,
 }: {
   events: CalendarEvent[]
   month: number
@@ -53,7 +48,6 @@ function MiniCalendar({
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-  // Group events by date
   const eventsByDate: Record<string, CalendarEvent[]> = {}
   for (const ev of events) {
     const d = ev.event_date.slice(0, 10)
@@ -61,33 +55,23 @@ function MiniCalendar({
     eventsByDate[d].push(ev)
   }
 
-  function prevMonth() {
-    if (month === 1) onMonthChange(12, year - 1)
-    else onMonthChange(month - 1, year)
-  }
-  function nextMonth() {
-    if (month === 12) onMonthChange(1, year + 1)
-    else onMonthChange(month + 1, year)
-  }
-
   const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
   while (cells.length % 7 !== 0) cells.push(null)
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="text-gray-400 hover:text-white px-2 py-1 rounded">◀</button>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => month === 1 ? onMonthChange(12, year - 1) : onMonthChange(month - 1, year)}
+          className="text-gray-400 hover:text-white px-2 py-1 rounded">◀</button>
         <h3 className="text-sm font-semibold text-white">{MONTH_NAMES[month - 1]} {year}</h3>
-        <button onClick={nextMonth} className="text-gray-400 hover:text-white px-2 py-1 rounded">▶</button>
+        <button onClick={() => month === 12 ? onMonthChange(1, year + 1) : onMonthChange(month + 1, year)}
+          className="text-gray-400 hover:text-white px-2 py-1 rounded">▶</button>
       </div>
-      {/* Day headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAYS_OF_WEEK.map(d => (
           <div key={d} className="text-center text-[10px] font-medium text-gray-500 py-1">{d}</div>
         ))}
       </div>
-      {/* Cells */}
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((day, i) => {
           if (!day) return <div key={i} />
@@ -97,12 +81,10 @@ function MiniCalendar({
           return (
             <div
               key={i}
-              className={`rounded-lg p-1 min-h-[48px] cursor-pointer transition-colors group ${isToday ? 'bg-blue-950 border border-blue-700' : 'hover:bg-gray-800'}`}
+              className={`rounded-lg p-1 min-h-[44px] cursor-pointer transition-colors group ${isToday ? 'bg-blue-950 border border-blue-700' : 'hover:bg-gray-800'}`}
               onClick={() => onAddEvent(dateStr)}
             >
-              <span className={`text-xs font-medium block text-center mb-1 ${isToday ? 'text-blue-300' : 'text-gray-300'}`}>
-                {day}
-              </span>
+              <span className={`text-xs font-medium block text-center mb-0.5 ${isToday ? 'text-blue-300' : 'text-gray-300'}`}>{day}</span>
               {dayEvents.slice(0, 2).map(ev => (
                 <div key={ev.id} className="relative group/ev">
                   <div className={`text-[9px] truncate px-1 py-0.5 rounded mb-0.5 ${
@@ -110,18 +92,14 @@ function MiniCalendar({
                     ev.event_type === 'reminder' ? 'bg-orange-900 text-orange-200' :
                     ev.event_type === 'milestone' ? 'bg-emerald-900 text-emerald-200' :
                     'bg-gray-700 text-gray-300'
-                  }`}>
-                    {ev.title}
-                  </div>
+                  }`}>{ev.title}</div>
                   <button
                     onClick={e => { e.stopPropagation(); onDeleteEvent(ev.id) }}
                     className="absolute -top-0.5 -right-0.5 hidden group-hover/ev:flex items-center justify-center w-3 h-3 bg-red-700 text-white rounded-full text-[8px] leading-none"
                   >×</button>
                 </div>
               ))}
-              {dayEvents.length > 2 && (
-                <div className="text-[9px] text-gray-500">+{dayEvents.length - 2} more</div>
-              )}
+              {dayEvents.length > 2 && <div className="text-[9px] text-gray-500">+{dayEvents.length - 2}</div>}
               <div className="hidden group-hover:block text-[9px] text-gray-600 text-center mt-0.5">+ add</div>
             </div>
           )
@@ -133,11 +111,7 @@ function MiniCalendar({
 
 // ── Add Event Modal ────────────────────────────────────────────────────────
 
-function AddEventModal({
-  date,
-  onSave,
-  onClose,
-}: {
+function AddEventModal({ date, onSave, onClose }: {
   date: string
   onSave: (event: CalendarEvent) => void
   onClose: () => void
@@ -154,9 +128,7 @@ function AddEventModal({
     try {
       const ev = await addCalendarEvent({ event_date: date, title: title.trim(), notes: notes || null, project_id: null, event_type: eventType })
       onSave(ev)
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   return (
@@ -201,10 +173,8 @@ function TaskCard({ task }: { task: ShopTaskProject }) {
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <Link
-            href={`/dashboard/projects/${project.id}?view=shop`}
-            className="font-semibold text-white hover:text-amber-400 transition-colors text-sm"
-          >
+          <Link href={`/dashboard/projects/${project.id}?view=shop`}
+            className="font-semibold text-white hover:text-amber-400 transition-colors text-sm">
             {label}
           </Link>
           <p className="text-base font-bold text-white mt-1">{currentStep.step_name}</p>
@@ -230,10 +200,8 @@ function TaskCard({ task }: { task: ShopTaskProject }) {
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500">On this step {formatAge(stepAgeHours)}</span>
-        <Link
-          href={`/dashboard/projects/${project.id}?view=shop`}
-          className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
-        >
+        <Link href={`/dashboard/projects/${project.id}?view=shop`}
+          className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg transition-colors">
           Go to Project →
         </Link>
       </div>
@@ -263,33 +231,30 @@ export default function ShopTasksPage() {
   }, [])
 
   useEffect(() => {
-    getCalendarEvents(calMonth, calYear)
-      .then(setEvents)
-      .catch(console.error)
+    getCalendarEvents(calMonth, calYear).then(setEvents).catch(console.error)
   }, [calMonth, calYear])
 
   const actionTasks = tasks.filter(t => t.currentStep.step_type === 'action')
   const waitingTasks = tasks.filter(t => t.currentStep.step_type === 'waiting')
-
-  // Waiting summary
   const waitingSummary = (['customer', 'supplier', 'designer', 'internal'] as const)
     .map(w => ({ label: w, count: waitingTasks.filter(t => t.currentStep.waiting_on === w).length }))
     .filter(x => x.count > 0)
 
+  const urgentTouchups = touchups.filter(t => t.priority === 'urgent')
+
   return (
-    <div className="flex gap-6 h-full">
+    <div className="flex gap-6 items-start">
+
       {/* ── LEFT: Task List ── */}
       <div className="flex-1 min-w-0 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard/shop" className="text-gray-500 hover:text-gray-300 text-sm">← Shop</Link>
-            <h1 className="text-xl font-bold text-white">
-              Today&apos;s Tasks
-              {!loading && (
-                <span className="ml-2 text-sm font-normal text-gray-400">({tasks.length} projects active)</span>
-              )}
-            </h1>
-          </div>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/shop" className="text-gray-500 hover:text-gray-300 text-sm">← Shop</Link>
+          <h1 className="text-xl font-bold text-white">
+            Today&apos;s Tasks
+            {!loading && (
+              <span className="ml-2 text-sm font-normal text-gray-400">({tasks.length} projects active)</span>
+            )}
+          </h1>
         </div>
 
         {loading ? (
@@ -301,7 +266,6 @@ export default function ShopTasksPage() {
           </div>
         ) : (
           <>
-            {/* Section 1: Action Required */}
             {actionTasks.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -315,7 +279,6 @@ export default function ShopTasksPage() {
               </div>
             )}
 
-            {/* Section 2: Waiting On */}
             {waitingTasks.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-2">
@@ -333,71 +296,84 @@ export default function ShopTasksPage() {
                 </div>
               </div>
             )}
-
-            {/* Section 3: Open Touch-Ups */}
-            {touchups.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-yellow-400" />
-                  <h2 className="font-semibold text-white text-sm">Open Touch-Ups</h2>
-                  <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{touchups.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {touchups.map(t => (
-                    <div key={t.id} className={`bg-gray-900 border rounded-xl px-4 py-3 ${t.priority === 'urgent' ? 'border-red-700' : 'border-gray-800'}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            {t.priority === 'urgent' && (
-                              <span className="text-[10px] font-semibold bg-red-800 text-red-200 px-1.5 py-0.5 rounded uppercase">Urgent</span>
-                            )}
-                            <span className="text-sm font-semibold text-white leading-snug">{t.description}</span>
-                          </div>
-                          {t.assigned_to && <p className="text-xs text-gray-400">Assigned: {t.assigned_to}</p>}
-                          {t.address && <p className="text-xs text-gray-500 mt-0.5">📍 {t.address}</p>}
-                        </div>
-                        <span className="text-xs text-gray-600 shrink-0">{formatAge((Date.now() - new Date(t.created_at).getTime()) / 3600000)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3">
-                  <Link href="/dashboard/touchups" className="text-xs text-amber-400 hover:text-amber-300">
-                    Go to Touch-Ups →
-                  </Link>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
 
-      {/* ── RIGHT: Calendar ── */}
-      <div className="w-80 shrink-0 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-300">Calendar</h2>
-        <MiniCalendar
-          events={events}
-          month={calMonth}
-          year={calYear}
-          onMonthChange={(m, y) => { setCalMonth(m); setCalYear(y) }}
-          onAddEvent={date => setAddingEventDate(date)}
-          onDeleteEvent={async (id) => {
-            await deleteCalendarEvent(id).catch(console.error)
-            setEvents(prev => prev.filter(e => e.id !== id))
-          }}
-        />
-        {/* Upcoming events list */}
-        {events.length > 0 && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">This Month</h3>
-            {events.map(ev => (
-              <div key={ev.id} className="flex items-start gap-2 text-xs">
-                <span className="text-gray-500 shrink-0 w-16">{ev.event_date.slice(5).replace('-', '/')}</span>
-                <span className="text-gray-200 flex-1 truncate">{ev.title}</span>
-              </div>
-            ))}
+      {/* ── RIGHT: Calendar (60%) + Open Touch-Ups (40%) — sticky ── */}
+      <div className="w-80 shrink-0 sticky top-6 space-y-4 max-h-[calc(100vh-80px)] overflow-y-auto">
+
+        {/* Calendar — top 60% */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-200">Calendar</h2>
+            <button onClick={() => setAddingEventDate(
+              `${calYear}-${String(calMonth).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`
+            )} className="text-xs text-amber-400 hover:text-amber-300">+ Add Event</button>
           </div>
-        )}
+          <MiniCalendar
+            events={events}
+            month={calMonth}
+            year={calYear}
+            onMonthChange={(m, y) => { setCalMonth(m); setCalYear(y) }}
+            onAddEvent={date => setAddingEventDate(date)}
+            onDeleteEvent={async (id) => {
+              await deleteCalendarEvent(id).catch(console.error)
+              setEvents(prev => prev.filter(e => e.id !== id))
+            }}
+          />
+          {events.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">This Month</p>
+              {events.slice(0, 5).map(ev => (
+                <div key={ev.id} className="flex items-start gap-2 text-xs">
+                  <span className="text-gray-500 shrink-0 w-14">{ev.event_date.slice(5).replace('-', '/')}</span>
+                  <span className="text-gray-200 flex-1 truncate">{ev.title}</span>
+                </div>
+              ))}
+              {events.length > 5 && <p className="text-[10px] text-gray-600">+{events.length - 5} more</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Open Touch-Ups — bottom 40% */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+              Open Touch-Ups
+              {urgentTouchups.length > 0 && (
+                <span className="bg-red-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{urgentTouchups.length} urgent</span>
+              )}
+            </h2>
+            <Link href="/dashboard/touchups" className="text-xs text-amber-400 hover:text-amber-300">See all →</Link>
+          </div>
+
+          {touchups.length === 0 ? (
+            <p className="text-xs text-gray-600">No open touch-ups.</p>
+          ) : (
+            <div className="space-y-2">
+              {touchups.map(t => (
+                <div key={t.id} className={`rounded-lg px-3 py-2.5 border ${t.priority === 'urgent' ? 'border-red-800 bg-red-950/20' : 'border-gray-800 bg-gray-800/40'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        {t.priority === 'urgent' && (
+                          <span className="text-[9px] font-semibold bg-red-800 text-red-200 px-1 py-0.5 rounded uppercase shrink-0">Urgent</span>
+                        )}
+                        <p className="text-xs font-semibold text-white truncate">{t.description}</p>
+                      </div>
+                      {t.assigned_to && <p className="text-[10px] text-gray-500">→ {t.assigned_to}</p>}
+                      {t.address && <p className="text-[10px] text-gray-600 truncate">📍 {t.address}</p>}
+                    </div>
+                    <span className="text-[10px] text-gray-600 shrink-0">
+                      {formatAge((Date.now() - new Date(t.created_at).getTime()) / 3600000)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add Event Modal */}
