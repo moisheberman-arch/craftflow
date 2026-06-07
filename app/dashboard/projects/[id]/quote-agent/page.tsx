@@ -179,7 +179,6 @@ export default function QuoteAgentPage() {
       // to guarantee we have the correct, fully-populated data.
       setSending(true)
       const payload = buildProjectPayload(p, ctx, notes)
-      console.log('[quote-agent frontend] firing initial message, payload:', JSON.stringify(payload))
       try {
         const res = await fetch('/api/quote-agent', {
           method: 'POST',
@@ -193,14 +192,12 @@ export default function QuoteAgentPage() {
         })
         const data = await res.json()
         if (data.error) throw new Error(data.error)
-        console.log('[quote-agent frontend] initial AI message received, length:', data.message?.length)
         setMessages([{
           role: 'assistant',
           content: data.message,
           timestamp: new Date().toISOString(),
         }])
       } catch (err) {
-        console.error('[quote-agent frontend] initial message failed:', err)
         setMessages([{
           role: 'assistant',
           content: "I'm ready to help build a quote for this project. Tell me about the job — dimensions, materials, and any special features — and I'll work through the pricing.",

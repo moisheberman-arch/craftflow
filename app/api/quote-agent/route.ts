@@ -101,11 +101,6 @@ export async function POST(req: NextRequest) {
     isInitialLoad?: boolean
   } = body
 
-  // ── Diagnostic logging ───────────────────────────────────────────────────
-  console.log('[quote-agent] projectId:', projectId)
-  console.log('[quote-agent] isInitialLoad:', isInitialLoad)
-  console.log('[quote-agent] projectDetails received from frontend:', JSON.stringify(projectDetails, null, 2))
-
   // ── Fetch pricing data server-side (publicly readable tables) ────────────
   const [materialsRes, addonsRes, pastQuotesRes] = await Promise.all([
     supabase.from('pricing_materials').select('*').order('category'),
@@ -116,10 +111,6 @@ export async function POST(req: NextRequest) {
       .order('updated_at', { ascending: false })
       .limit(10),
   ])
-
-  console.log('[quote-agent] pricing_materials count:', materialsRes.data?.length ?? 0, 'error:', materialsRes.error?.message)
-  console.log('[quote-agent] pricing_addons count:', addonsRes.data?.length ?? 0, 'error:', addonsRes.error?.message)
-  console.log('[quote-agent] past quotes count:', pastQuotesRes.data?.length ?? 0, 'error:', pastQuotesRes.error?.message)
 
   const pricingMaterials: PricingMaterial[] = materialsRes.data ?? []
   const pricingAddons: PricingAddon[] = addonsRes.data ?? []
@@ -191,8 +182,6 @@ export async function POST(req: NextRequest) {
     ...(designNoteLines.length > 0 ? [``, `DESIGN MEETING NOTES:`, ...designNoteLines] : []),
   ].join('\n')
 
-  console.log('[quote-agent] projectDetailsSection:\n', projectDetailsSection)
-
   // ── System prompt ────────────────────────────────────────────────────────
   const openingInstruction = isInitialLoad ? `
 OPENING MESSAGE INSTRUCTIONS (follow these exactly for this first message):
@@ -257,8 +246,6 @@ BEHAVIOR RULES:
     )
   }
 
-  console.log('[quote-agent] SYSTEM PROMPT (full):\n', systemPrompt)
-  console.log('[quote-agent] sending', chatMessages.length, 'messages to OpenAI')
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -276,14 +263,11 @@ BEHAVIOR RULES:
 
   if (!response.ok) {
     const err = await response.text()
-    console.error('[quote-agent] OpenAI error:', err)
     return NextResponse.json({ error: `OpenAI error: ${err}` }, { status: 500 })
   }
 
   const data = await response.json()
   const aiText: string = data.choices?.[0]?.message?.content ?? ''
-
-  console.log('[quote-agent] AI response length:', aiText.length, 'chars')
 
   const scopeMatch = aiText.match(/SCOPE OF WORK[:\s]*\n?([\s\S]*?)(?=\nCOST BREAKDOWN|\nCOMPLEXITY|\nFINAL PRICE|$)/i)
   const complexityMatch = aiText.match(/COMPLEXITY ASSESSMENT[:\s]*\n?([\s\S]*?)(?=\nFINAL PRICE|$)/i)
