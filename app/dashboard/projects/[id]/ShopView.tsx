@@ -11,12 +11,14 @@ import {
   getNotesByProjectId, addDesignMeetingNote, deleteNote,
   getShoppingListByProjectId, addShoppingListItem, updateShoppingListItem, deleteShoppingListItem,
   getOpenQuestionsByProjectId, addOpenQuestion, resolveQuestion, deleteQuestion,
-  setCurrentStep, autoAdvanceCurrentStep,
+  setCurrentStep, autoAdvanceCurrentStep, seedDefaultStepsIfEmpty,
+  getFilesByProjectId, uploadProjectFile, getProjectFileUrl, deleteProjectFile,
 } from '@/lib/api/supabase-client'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
   DesignMeetingNote, ShoppingListItem, StepSubtask, OpenQuestion,
   ProjectType, ProjectStatus, StepType, WaitingOn, QuestionDirectedAt,
+  ProjectFile,
 } from '@/lib/core/types'
 
 const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
@@ -269,17 +271,23 @@ export default function ShopView({ project: initialProject }: { project: Project
   const [shopInput, setShopInput] = useState('')
   const [addingShop, setAddingShop] = useState(false)
 
+  // Files
+  const [files, setFiles] = useState<ProjectFile[]>([])
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
   const id = project.id
 
   useEffect(() => {
     async function load() {
-      const [s, sl, m, dn, shop, q] = await Promise.all([
+      const [s, sl, m, dn, shop, q, f] = await Promise.all([
         getStepsByProjectId(id).catch(() => [] as ProductionStep[]),
         getStepLibrary().catch(() => [] as StepLibraryItem[]),
         getMaterialsByProjectId(id).catch(() => [] as MaterialItem[]),
         getNotesByProjectId(id).catch(() => [] as DesignMeetingNote[]),
         getShoppingListByProjectId(id).catch(() => [] as ShoppingListItem[]),
         getOpenQuestionsByProjectId(id).catch(() => [] as OpenQuestion[]),
+        getFilesByProjectId(id).catch(() => [] as ProjectFile[]),
       ])
       setSteps(s)
       setStepLibrary(sl)
@@ -287,11 +295,16 @@ export default function ShopView({ project: initialProject }: { project: Project
       setDesignNotes(dn)
       setShopItems(shop)
       setQuestions(q)
+      setFiles(f)
       // Preload subtasks for current step
       const curr = s.find(x => x.is_current)
       if (curr) {
         const subs = await getSubtasksByStepId(curr.id).catch(() => [])
         setSubtasksByStep({ [curr.id]: subs })
+      }
+      // Safety net: seed steps if project is deposit_received/in_production but has none
+      if (s.length === 0 && (initialProject.status === 'deposit_received' || initialProject.status === 'in_production')) {
+        seedDefaultStepsIfEmpty(id).then(() => getStepsByProjectId(id)).then(setSteps).catch(console.error)
       }
     }
     load()
@@ -372,6 +385,9 @@ export default function ShopView({ project: initialProject }: { project: Project
         },
       })
       setProject(updated)
+      if (pStatus === 'deposit_received') {
+        seedDefaultStepsIfEmpty(id).catch(console.error)
+      }
       setDetailsSaved(true)
       setTimeout(() => setDetailsSaved(false), 2000)
     } finally { setSavingDetails(false) }
@@ -530,6 +546,27 @@ export default function ShopView({ project: initialProject }: { project: Project
     } finally { setAddingMat(false) }
   }
 
+  // ── File uploads ──────────────────────────────────────────────────────────
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? [])
+    if (selected.length === 0) return
+    setUploadingFile(true)
+    try {
+      const uploaded = await Promise.all(selected.map(f => uploadProjectFile(id, f)))
+      setFiles(prev => [...uploaded, ...prev])
+    } catch (err) {
+      console.error('File upload failed:', err)
+    } finally {
+      setUploadingFile(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleDeleteFile(file: ProjectFile) {
+    await deleteProjectFile(file.id, file.file_path).catch(console.error)
+    setFiles(prev => prev.filter(f => f.id !== file.id))
+  }
+
   // ── Shopping list ─────────────────────────────────────────────────────────
   async function handleAddShop(e: React.FormEvent) {
     e.preventDefault()
@@ -598,7 +635,12 @@ export default function ShopView({ project: initialProject }: { project: Project
                 </div>
                 <div className="space-y-1 text-xs text-gray-400">
                   {customer?.phone && (
-                    <div><a href={`tel:${customer.phone}`} className="text-amber-400 hover:underline">{customer.phone}</a></div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <a href={`tel:${customer.phone}`} className="text-amber-400 hover:underline">{customer.phone}</a>
+                      {customer?.contact_preferences?.call && <span className="text-[9px] font-semibold bg-emerald-900 text-emerald-200 px-1 py-0.5 rounded">📞 Call</span>}
+                      {customer?.contact_preferences?.text && <span className="text-[9px] font-semibold bg-blue-900 text-blue-200 px-1 py-0.5 rounded">💬 Text</span>}
+                      {customer?.contact_preferences?.whatsapp && <span className="text-[9px] font-semibold bg-green-900 text-green-200 px-1 py-0.5 rounded">📱 WA</span>}
+                    </div>
                   )}
                   {customer?.email && (
                     <div><a href={`mailto:${customer.email}`} className="text-amber-400 hover:underline truncate block">{customer.email}</a></div>
@@ -1032,6 +1074,51 @@ export default function ShopView({ project: initialProject }: { project: Project
             </form>
           </div>
 
+          {/* Files */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-200">Files</h3>
+              <label className={`cursor-pointer text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors ${uploadingFile ? 'bg-gray-700 text-gray-500 cursor-wait' : 'bg-amber-500 hover:bg-amber-400 text-gray-950'}`}>
+                {uploadingFile ? 'Uploading...' : '+ Upload'}
+                <input type="file" multiple className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
+              </label>
+            </div>
+            {files.length === 0 && !uploadingFile ? (
+              <p className="text-xs text-gray-600">No files yet</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {files.map(file => {
+                  const isImage = file.mime_type?.startsWith('image/')
+                  const url = getProjectFileUrl(file.file_path)
+                  return (
+                    <div key={file.id} className="relative group rounded-lg overflow-hidden bg-gray-800 border border-gray-700">
+                      {isImage ? (
+                        <button
+                          onClick={() => setLightboxUrl(url)}
+                          className="w-full aspect-square block"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt={file.file_name} className="w-full h-full object-cover" />
+                        </button>
+                      ) : (
+                        <a href={url} target="_blank" rel="noopener noreferrer" download={file.file_name} className="w-full aspect-square flex flex-col items-center justify-center p-2">
+                          <span className="text-2xl">📄</span>
+                          <span className="text-[9px] text-gray-400 truncate w-full text-center mt-1">{file.file_name}</span>
+                        </a>
+                      )}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between px-1.5 py-1.5 pointer-events-none group-hover:pointer-events-auto">
+                        <a href={url} download={file.file_name} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-white bg-gray-700 hover:bg-gray-600 rounded px-1.5 py-0.5">↓</a>
+                        <button onClick={() => handleDeleteFile(file)}
+                          className="text-[10px] text-red-300 bg-red-900/80 hover:bg-red-800 rounded px-1.5 py-0.5">×</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Materials Checklist */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h3 className="text-sm font-semibold text-gray-200 mb-3">Materials Checklist</h3>
@@ -1104,6 +1191,21 @@ export default function ShopView({ project: initialProject }: { project: Project
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Image lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="Preview" className="max-w-full max-h-full rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          <button
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white bg-gray-800 hover:bg-gray-700 w-8 h-8 rounded-full flex items-center justify-center text-lg"
+          >×</button>
         </div>
       )}
     </div>

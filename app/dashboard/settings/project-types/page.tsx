@@ -5,8 +5,9 @@ import Link from 'next/link'
 import {
   getAllProjectTypeFields, addProjectTypeField, updateProjectTypeField,
   deleteProjectTypeField, reorderProjectTypeFields,
+  getCustomProjectTypes, createCustomProjectType, updateCustomProjectType, deleteCustomProjectType,
 } from '@/lib/api/supabase-client'
-import type { ProjectTypeField, ProjectTypeFieldType } from '@/lib/core/types'
+import type { ProjectTypeField, ProjectTypeFieldType, CustomProjectType } from '@/lib/core/types'
 
 const PROJECT_TYPES = ['dining_table', 'built_in', 'bookcase', 'bar', 'buffet', 'desk', 'other'] as const
 type PTKey = typeof PROJECT_TYPES[number]
@@ -148,8 +149,17 @@ export default function ProjectTypesPage() {
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
 
+  // Custom project types
+  const [customTypes, setCustomTypes] = useState<CustomProjectType[]>([])
+  const [showNewType, setShowNewType] = useState(false)
+  const [newTypeName, setNewTypeName] = useState('')
+  const [savingNewType, setSavingNewType] = useState(false)
+
   useEffect(() => {
-    getAllProjectTypeFields().then(setAllFields).catch(console.error).finally(() => setLoading(false))
+    Promise.all([
+      getAllProjectTypeFields(),
+      getCustomProjectTypes().catch(() => [] as CustomProjectType[]),
+    ]).then(([f, ct]) => { setAllFields(f); setCustomTypes(ct) }).catch(console.error).finally(() => setLoading(false))
   }, [])
 
   const fieldsForType = allFields.filter(f => f.project_type === selectedType).sort((a, b) => a.sequence_order - b.sequence_order)
@@ -189,6 +199,32 @@ export default function ProjectTypesPage() {
     setDragId(null); setDragOver(null)
   }
 
+  function slugifyType(name: string) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  }
+
+  async function handleCreateCustomType(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newTypeName.trim()) return
+    setSavingNewType(true)
+    try {
+      const ct = await createCustomProjectType({ name: newTypeName.trim(), key: slugifyType(newTypeName.trim()) })
+      setCustomTypes(prev => [...prev, ct])
+      setNewTypeName('')
+      setShowNewType(false)
+    } finally { setSavingNewType(false) }
+  }
+
+  async function handleDeleteCustomType(id: string) {
+    await deleteCustomProjectType(id).catch(console.error)
+    setCustomTypes(prev => prev.filter(ct => ct.id !== id))
+  }
+
+  async function handleToggleCustomType(ct: CustomProjectType) {
+    const updated = await updateCustomProjectType(ct.id, { is_active: !ct.is_active }).catch(() => ct)
+    setCustomTypes(prev => prev.map(x => x.id === updated.id ? updated : x))
+  }
+
   if (loading) return <div className="text-center py-8 text-gray-500">Loading...</div>
 
   return (
@@ -215,6 +251,56 @@ export default function ProjectTypesPage() {
               </button>
             )
           })}
+        </div>
+
+        {customTypes.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1 px-1">Custom Types</p>
+            <div className="space-y-0.5">
+              {customTypes.map(ct => (
+                <div key={ct.id} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${!ct.is_active ? 'opacity-40' : ''}`}>
+                  <span className="text-gray-300 truncate flex-1">{ct.name}</span>
+                  <div className="flex gap-1 ml-1">
+                    <button onClick={() => handleToggleCustomType(ct)}
+                      className={`text-[9px] px-1 py-0.5 rounded font-semibold ${ct.is_active ? 'bg-emerald-900 text-emerald-300' : 'bg-gray-700 text-gray-500'}`}>
+                      {ct.is_active ? 'On' : 'Off'}
+                    </button>
+                    <button onClick={() => handleDeleteCustomType(ct.id)}
+                      className="text-[9px] text-red-400 hover:text-red-300">×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3">
+          {showNewType ? (
+            <form onSubmit={handleCreateCustomType} className="space-y-2">
+              <input
+                required
+                placeholder="Type name (e.g. Murphy Bed)"
+                value={newTypeName}
+                onChange={e => setNewTypeName(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none"
+              />
+              <div className="flex gap-1.5">
+                <button type="submit" disabled={savingNewType || !newTypeName.trim()}
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold text-xs py-1.5 rounded-lg">
+                  {savingNewType ? '...' : 'Add'}
+                </button>
+                <button type="button" onClick={() => { setShowNewType(false); setNewTypeName('') }}
+                  className="text-gray-400 hover:text-white text-xs px-2">Cancel</button>
+              </div>
+            </form>
+          ) : (
+            <button
+              onClick={() => setShowNewType(true)}
+              className="w-full text-left text-xs text-amber-400 hover:text-amber-300 px-1 py-1"
+            >
+              + New Project Type
+            </button>
+          )}
         </div>
       </div>
 

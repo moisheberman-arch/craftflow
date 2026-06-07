@@ -10,15 +10,17 @@ import {
   getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial,
   getStepsByProjectId, addStep, updateStep, deleteStep,
   getStepLibrary, addStepToLibrary,
-  getQuoteByProjectId,
+  getQuoteByProjectId, createQuote, updateQuote,
   getNotesByProjectId, addDesignMeetingNote, deleteNote,
   getPricingAddons, deleteProject, getProjectCountByCustomerId, deleteCustomer,
   getFieldsByProjectType, getAnswersByProjectId, saveAllAnswers,
+  getFilesByProjectId, uploadProjectFile, getProjectFileUrl, deleteProjectFile,
+  getCustomProjectTypes,
 } from '@/lib/api/supabase-client'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
   Quote, ProjectStatus, ProjectType, DesignMeetingNote, PricingAddon,
-  ProjectTypeField, ProjectTypeAnswer,
+  ProjectTypeField, ProjectTypeAnswer, ProjectFile, CustomProjectType,
 } from '@/lib/core/types'
 
 const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'bar', 'desk', 'other']
@@ -71,7 +73,7 @@ function getStageAlerts(project: Project): string[] {
   return []
 }
 
-type Tab = 'overview' | 'materials' | 'steps' | 'quote'
+type Tab = 'overview' | 'materials' | 'steps' | 'quote' | 'files'
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -80,8 +82,8 @@ export default function ProjectDetailPage() {
   const view = searchParams.get('view') ?? 'sales'
   const isShopView = view === 'shop'
   const visibleTabs: Tab[] = isShopView
-    ? ['overview', 'materials', 'steps', 'quote']
-    : ['overview', 'materials', 'quote']
+    ? ['overview', 'materials', 'steps', 'quote', 'files']
+    : ['overview', 'materials', 'quote', 'files']
 
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('overview')
@@ -107,6 +109,20 @@ export default function ProjectDetailPage() {
   const [typeAnswers, setTypeAnswers] = useState<Record<string, string>>({})
   const [savingAnswers, setSavingAnswers] = useState(false)
   const [answersSaved, setAnswersSaved] = useState(false)
+
+  // Files
+  const [files, setFiles] = useState<ProjectFile[]>([])
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  // Custom project types
+  const [customTypes, setCustomTypes] = useState<CustomProjectType[]>([])
+
+  // Manual quote state
+  const [showManualQuote, setShowManualQuote] = useState(false)
+  const [manualLineItems, setManualLineItems] = useState<{ desc: string; amount: string }[]>([{ desc: '', amount: '' }])
+  const [manualMarkup, setManualMarkup] = useState('65')
+  const [savingManual, setSavingManual] = useState(false)
 
   // Overview form state
   const [customerId, setCustomerId] = useState('')
@@ -151,7 +167,7 @@ export default function ProjectDetailPage() {
       setNotes(p.notes ?? '')
 
       // Load secondary data independently — failures are non-fatal
-      const [c, m, s, sl, q, dn, addons] = await Promise.all([
+      const [c, m, s, sl, q, dn, addons, f, ct] = await Promise.all([
         getCustomers().catch(() => [] as Customer[]),
         getMaterialsByProjectId(id).catch(() => [] as MaterialItem[]),
         getStepsByProjectId(id).catch(() => [] as ProductionStep[]),
@@ -159,6 +175,8 @@ export default function ProjectDetailPage() {
         getQuoteByProjectId(id).catch(() => null),
         getNotesByProjectId(id).catch(() => [] as DesignMeetingNote[]),
         getPricingAddons().catch(() => [] as PricingAddon[]),
+        getFilesByProjectId(id).catch(() => [] as ProjectFile[]),
+        getCustomProjectTypes().catch(() => [] as CustomProjectType[]),
       ])
       setCustomers(c)
       setMaterials(m)
@@ -167,6 +185,8 @@ export default function ProjectDetailPage() {
       setQuote(q)
       setDesignNotes(dn)
       setPricingAddons(addons)
+      setFiles(f)
+      setCustomTypes(ct)
       setPrimaryMaterial(p.primary_material ?? '')
       setRequestedAddons((p.requested_addons as string[] | undefined) ?? [])
       // Load project type fields + answers, then apply smart defaults for empty fields
@@ -317,6 +337,68 @@ export default function ProjectDetailPage() {
     setSteps(prev => prev.filter(s => s.id !== stepId))
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? [])
+    if (selected.length === 0) return
+    setUploadingFile(true)
+    try {
+      const uploaded = await Promise.all(selected.map(f => uploadProjectFile(id, f)))
+      setFiles(prev => [...uploaded, ...prev])
+    } catch (err) {
+      console.error('File upload error:', err)
+    } finally {
+      setUploadingFile(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleDeleteFile(file: ProjectFile) {
+    await deleteProjectFile(file.id, file.file_path).catch(console.error)
+    setFiles(prev => prev.filter(f => f.id !== file.id))
+  }
+
+  async function handleSaveManualQuote() {
+    const items = manualLineItems.filter(li => li.desc && li.amount)
+    if (items.length === 0) return
+    const subtotal = items.reduce((sum, li) => sum + parseFloat(li.amount || '0'), 0)
+    const markup = parseFloat(manualMarkup || '0')
+    const total = subtotal * (1 + markup / 100)
+    const scopeText = items.map(li => `${li.desc}: $${parseFloat(li.amount).toFixed(2)}`).join('\n')
+    setSavingManual(true)
+    try {
+      if (quote) {
+        const updated = await updateQuote(quote.id, {
+          base_price: subtotal,
+          total_price: Math.round(total),
+          markup_percentage: markup,
+          scope_of_work: scopeText,
+          source: 'manual',
+          status: 'initial',
+        })
+        setQuote(updated)
+      } else {
+        const newQ = await createQuote({
+          project_id: id,
+          ai_conversation_history: [],
+          base_price: subtotal,
+          add_ons: [],
+          total_price: Math.round(total),
+          markup_percentage: markup,
+          status: 'initial',
+          scope_of_work: scopeText,
+          complexity_assessment: null,
+          version: 1,
+          source: 'manual',
+        })
+        setQuote(newQ)
+      }
+      setShowManualQuote(false)
+      setManualLineItems([{ desc: '', amount: '' }])
+    } finally {
+      setSavingManual(false)
+    }
+  }
+
   async function handleAddNote(e: React.FormEvent) {
     e.preventDefault()
     if (!newNote.trim()) return
@@ -456,6 +538,7 @@ export default function ProjectDetailPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                 <option value="">— Select type —</option>
                 {PROJECT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
+                {customTypes.filter(ct => ct.is_active).map(ct => <option key={ct.key} value={ct.key}>{ct.name}</option>)}
               </select>
             </div>
             <div>
@@ -746,14 +829,22 @@ export default function ProjectDetailPage() {
       {tab === 'quote' && (
         <div className="space-y-6">
           {!quote ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-              <p className="text-gray-400 mb-4">No quote yet for this project.</p>
-              <Link
-                href={`/dashboard/projects/${id}/quote-agent?view=${view}`}
-                className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-5 py-2.5 rounded-lg text-sm inline-block"
-              >
-                Start AI Quote
-              </Link>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center space-y-3">
+              <p className="text-gray-400">No quote yet for this project.</p>
+              <div className="flex gap-3 justify-center">
+                <Link
+                  href={`/dashboard/projects/${id}/quote-agent?view=${view}`}
+                  className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-5 py-2.5 rounded-lg text-sm inline-block"
+                >
+                  Start AI Quote
+                </Link>
+                <button
+                  onClick={() => setShowManualQuote(v => !v)}
+                  className="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-5 py-2.5 rounded-lg text-sm"
+                >
+                  Create Manual Quote
+                </button>
+              </div>
             </div>
           ) : (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
@@ -765,12 +856,20 @@ export default function ProjectDetailPage() {
                     {(quote.version ?? 1) > 1 && ` v${quote.version}`}
                   </span>
                 </div>
-                <Link
-                  href={`/dashboard/projects/${id}/quote-agent?view=${view}`}
-                  className="text-sm text-amber-400 hover:text-amber-300"
-                >
-                  Open Quote Agent
-                </Link>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowManualQuote(v => !v)}
+                    className="text-sm text-gray-400 hover:text-white"
+                  >
+                    Manual Quote
+                  </button>
+                  <Link
+                    href={`/dashboard/projects/${id}/quote-agent?view=${view}`}
+                    className="text-sm text-amber-400 hover:text-amber-300"
+                  >
+                    Open Quote Agent
+                  </Link>
+                </div>
               </div>
 
               {quote.total_price != null && (
@@ -791,6 +890,66 @@ export default function ProjectDetailPage() {
                   <p className="text-sm text-gray-300">{quote.complexity_assessment}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Manual Quote Form */}
+          {showManualQuote && (
+            <div className="bg-gray-900 border border-amber-800 rounded-xl p-5 space-y-4">
+              <h3 className="font-semibold text-white text-sm">Manual Quote</h3>
+              <div className="space-y-2">
+                {manualLineItems.map((item, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input
+                      placeholder="Description"
+                      value={item.desc}
+                      onChange={e => setManualLineItems(prev => prev.map((li, j) => j === i ? { ...li, desc: e.target.value } : li))}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="$Amount"
+                      value={item.amount}
+                      onChange={e => setManualLineItems(prev => prev.map((li, j) => j === i ? { ...li, amount: e.target.value } : li))}
+                      className="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    {manualLineItems.length > 1 && (
+                      <button onClick={() => setManualLineItems(prev => prev.filter((_, j) => j !== i))}
+                        className="text-red-400 hover:text-red-300 text-sm">×</button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  onClick={() => setManualLineItems(prev => [...prev, { desc: '', amount: '' }])}
+                  className="text-xs text-amber-400 hover:text-amber-300"
+                >+ Add Line Item</button>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-gray-400">Markup %</label>
+                <input
+                  type="number"
+                  value={manualMarkup}
+                  onChange={e => setManualMarkup(e.target.value)}
+                  className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                {(() => {
+                  const subtotal = manualLineItems.reduce((s, li) => s + parseFloat(li.amount || '0'), 0)
+                  const total = subtotal * (1 + parseFloat(manualMarkup || '0') / 100)
+                  return subtotal > 0 ? (
+                    <span className="text-sm text-amber-400 font-semibold">Total: ${Math.round(total).toLocaleString()}</span>
+                  ) : null
+                })()}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveManualQuote}
+                  disabled={savingManual || !manualLineItems.some(li => li.desc && li.amount)}
+                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
+                >
+                  {savingManual ? 'Saving...' : 'Save Quote'}
+                </button>
+                <button onClick={() => setShowManualQuote(false)} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+              </div>
             </div>
           )}
 
@@ -826,6 +985,66 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Files Tab ── */}
+      {tab === 'files' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold">Project Files</h2>
+            <label className={`cursor-pointer text-sm font-semibold px-4 py-2 rounded-lg transition-colors ${uploadingFile ? 'bg-gray-700 text-gray-500 cursor-wait' : 'bg-amber-500 hover:bg-amber-400 text-gray-950'}`}>
+              {uploadingFile ? 'Uploading...' : '+ Upload Files'}
+              <input type="file" multiple className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
+            </label>
+          </div>
+          {files.length === 0 && !uploadingFile ? (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-500 text-sm">
+              No files yet. Upload photos, drawings, or documents for this project.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {files.map(file => {
+                const isImage = file.mime_type?.startsWith('image/')
+                const url = getProjectFileUrl(file.file_path)
+                return (
+                  <div key={file.id} className="relative group rounded-xl overflow-hidden bg-gray-900 border border-gray-800">
+                    {isImage ? (
+                      <button onClick={() => setLightboxUrl(url)} className="w-full aspect-square block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={file.file_name} className="w-full h-full object-cover" />
+                      </button>
+                    ) : (
+                      <a href={url} target="_blank" rel="noopener noreferrer" download={file.file_name}
+                        className="w-full aspect-square flex flex-col items-center justify-center p-3 bg-gray-900">
+                        <span className="text-3xl mb-2">📄</span>
+                        <span className="text-[10px] text-gray-400 truncate w-full text-center">{file.file_name}</span>
+                      </a>
+                    )}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-end justify-between p-2 pointer-events-none group-hover:pointer-events-auto">
+                      <button onClick={() => handleDeleteFile(file)}
+                        className="text-xs text-red-300 bg-red-900/80 hover:bg-red-800 rounded-lg px-2 py-1 font-semibold self-end">Delete</button>
+                      <div>
+                        <p className="text-[9px] text-gray-300 truncate max-w-full text-right">{file.file_name}</p>
+                        <a href={url} download={file.file_name} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-white bg-gray-700 hover:bg-gray-600 rounded px-2 py-0.5 float-right mt-1">↓ Download</a>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="Preview" className="max-w-full max-h-full rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          <button onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white bg-gray-800 hover:bg-gray-700 w-8 h-8 rounded-full flex items-center justify-center text-lg">×</button>
         </div>
       )}
 

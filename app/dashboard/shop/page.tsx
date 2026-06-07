@@ -15,6 +15,7 @@ import {
   autoAdvanceCurrentStep,
   getAllUnpurchasedShoppingItems,
   updateShoppingListItem,
+  seedDefaultStepsIfEmpty,
 } from '@/lib/api/supabase-client'
 import type {
   Project, ProductionStep, MaterialItem, StepSubtask,
@@ -353,6 +354,9 @@ function ProjectCard({
     try {
       await updateProject(p.id, { status: newStatus })
       onProjectUpdated(p.id, { status: newStatus })
+      if (newStatus === 'deposit_received') {
+        seedDefaultStepsIfEmpty(p.id).catch(console.error)
+      }
     } finally {
       setSavingStatus(false)
     }
@@ -638,7 +642,12 @@ export default function ShopDashboard() {
         } as EnrichedProject
       }))
 
-      setProjects(enriched.sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999)))
+      setProjects(enriched.sort((a, b) => {
+        const posA = a.queue_position ?? 9999
+        const posB = b.queue_position ?? 9999
+        if (posA !== posB) return posA - posB
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }))
     }
     load().catch(console.error).finally(() => setLoading(false))
   }, [])

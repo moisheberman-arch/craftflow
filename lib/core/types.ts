@@ -1,3 +1,9 @@
+export interface ContactPreferences {
+  call?: boolean
+  text?: boolean
+  whatsapp?: boolean
+}
+
 export interface Customer {
   id: string
   created_at: string
@@ -5,6 +11,7 @@ export interface Customer {
   email: string | null
   phone: string | null
   address: string | null
+  contact_preferences?: ContactPreferences
 }
 
 export type ProjectType = 'dining_table' | 'built_in' | 'bookcase' | 'buffet' | 'bar' | 'desk' | 'other'
@@ -188,8 +195,27 @@ export interface Quote {
   scope_of_work: string | null
   complexity_assessment: string | null
   version: number
+  source?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ProjectFile {
+  id: string
+  project_id: string
+  file_name: string
+  file_path: string
+  file_size: number | null
+  mime_type: string | null
+  created_at: string
+}
+
+export interface CustomProjectType {
+  id: string
+  name: string
+  key: string
+  is_active: boolean
+  created_at: string
 }
 
 export type MaterialCategory = 'wood' | 'hardware' | 'finish' | 'trim' | 'lighting' | 'other'

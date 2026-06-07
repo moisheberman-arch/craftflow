@@ -6,10 +6,10 @@ import { useRouter } from 'next/navigation'
 import {
   getProjects, createProject, getCustomers, createCustomer,
   updateCustomer, getProjectsByCustomerId, updateProject,
-  getPricingAddons,
+  getPricingAddons, seedDefaultStepsIfEmpty, getCustomProjectTypes,
 } from '@/lib/api/supabase-client'
 import { supabase } from '@/lib/supabase'
-import type { Project, ProjectStatus, Customer, ProjectType, PricingAddon } from '@/lib/core/types'
+import type { Project, ProjectStatus, Customer, ProjectType, PricingAddon, ContactPreferences, CustomProjectType } from '@/lib/core/types'
 
 // ── Status config ──────────────────────────────────────────────────────────
 
@@ -76,6 +76,7 @@ function CustomersModal({
   const [formPhone, setFormPhone] = useState('')
   const [formEmail, setFormEmail] = useState('')
   const [formAddress, setFormAddress] = useState('')
+  const [formPrefs, setFormPrefs] = useState<ContactPreferences>({})
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -105,6 +106,7 @@ function CustomersModal({
   function openNew() {
     setEditingId(null)
     setFormName(''); setFormPhone(''); setFormEmail(''); setFormAddress('')
+    setFormPrefs({})
     setFormError('')
     setState('form')
   }
@@ -113,6 +115,7 @@ function CustomersModal({
     setEditingId(c.id)
     setFormName(c.name); setFormPhone(c.phone ?? '')
     setFormEmail(c.email ?? ''); setFormAddress(c.address ?? '')
+    setFormPrefs(c.contact_preferences ?? {})
     setFormError('')
     setState('form')
   }
@@ -135,6 +138,7 @@ function CustomersModal({
         const updated = await updateCustomer(editingId, {
           name: formName, phone: formPhone || null,
           email: formEmail || null, address: formAddress || null,
+          contact_preferences: formPrefs,
         })
         const next = customers.map(c => c.id === editingId ? updated : c)
         setCustomers(next); onCustomersChanged(next)
@@ -142,6 +146,7 @@ function CustomersModal({
         const newC = await createCustomer({
           name: formName, phone: formPhone || null,
           email: formEmail || null, address: formAddress || null,
+          contact_preferences: formPrefs,
         })
         const next = [...customers, newC].sort((a, b) => a.name.localeCompare(b.name))
         setCustomers(next); onCustomersChanged(next)
@@ -238,6 +243,16 @@ function CustomersModal({
                 <div><p className="text-gray-500 mb-0.5">Phone</p><p>{selectedCustomer.phone ?? '—'}</p></div>
                 <div><p className="text-gray-500 mb-0.5">Email</p><p>{selectedCustomer.email ?? '—'}</p></div>
                 <div className="col-span-2"><p className="text-gray-500 mb-0.5">Address</p><p>{selectedCustomer.address ?? '—'}</p></div>
+                {selectedCustomer.contact_preferences && Object.values(selectedCustomer.contact_preferences).some(Boolean) && (
+                  <div className="col-span-2">
+                    <p className="text-gray-500 mb-1">Contact Preference</p>
+                    <div className="flex gap-1.5">
+                      {selectedCustomer.contact_preferences.call && <span className="text-[10px] font-semibold bg-emerald-900 text-emerald-200 px-1.5 py-0.5 rounded">📞 Call</span>}
+                      {selectedCustomer.contact_preferences.text && <span className="text-[10px] font-semibold bg-blue-900 text-blue-200 px-1.5 py-0.5 rounded">💬 Text</span>}
+                      {selectedCustomer.contact_preferences.whatsapp && <span className="text-[10px] font-semibold bg-green-900 text-green-200 px-1.5 py-0.5 rounded">📱 WhatsApp</span>}
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <h3 className="font-semibold mb-3 text-sm text-gray-300">Projects</h3>
@@ -288,6 +303,19 @@ function CustomersModal({
                   <input value={formAddress} onChange={e => setFormAddress(e.target.value)}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
                 </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-gray-400 mb-1">Preferred Contact</label>
+                  <div className="flex gap-3">
+                    {(['call', 'text', 'whatsapp'] as const).map(pref => (
+                      <label key={pref} className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={!!formPrefs[pref]}
+                          onChange={e => setFormPrefs(p => ({ ...p, [pref]: e.target.checked }))}
+                          className="accent-amber-500 w-3.5 h-3.5" />
+                        <span className="text-sm text-gray-300 capitalize">{pref === 'whatsapp' ? 'WhatsApp' : pref.charAt(0).toUpperCase() + pref.slice(1)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
               {formError && <p className="text-red-400 text-sm">{formError}</p>}
               <div className="flex gap-3">
@@ -311,10 +339,12 @@ type NewProjectStep = 'customer' | 'details'
 
 function NewProjectModal({
   customers,
+  customTypes,
   onClose,
   onCreated,
 }: {
   customers: Customer[]
+  customTypes: CustomProjectType[]
   onClose: () => void
   onCreated: (project: Project, newCustomer?: Customer) => void
 }) {
@@ -478,6 +508,7 @@ function NewProjectModal({
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                   <option value="">— Select type —</option>
                   {PROJECT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
+                  {customTypes.filter(ct => ct.is_active).map(ct => <option key={ct.key} value={ct.key}>{ct.name}</option>)}
                 </select>
               </div>
               <div className="col-span-2">
@@ -537,6 +568,9 @@ function StatusBadgeSelect({
     try {
       await updateProject(projectId, { status: newStatus })
       onStatusChanged(projectId, newStatus)
+      if (newStatus === 'deposit_received') {
+        seedDefaultStepsIfEmpty(projectId).catch(console.error)
+      }
     } catch (err) {
       console.error('Status update failed', err)
     } finally {
@@ -572,14 +606,15 @@ export default function SalesDashboard() {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [customTypes, setCustomTypes] = useState<CustomProjectType[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewProject, setShowNewProject] = useState(false)
   const [showCustomers, setShowCustomers] = useState(false)
   const [navigateTo, setNavigateTo] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([getProjects(), getCustomers()])
-      .then(([p, c]) => { setProjects(p); setCustomers(c) })
+    Promise.all([getProjects(), getCustomers(), getCustomProjectTypes().catch(() => [] as CustomProjectType[])])
+      .then(([p, c, ct]) => { setProjects(p); setCustomers(c); setCustomTypes(ct) })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -629,6 +664,7 @@ export default function SalesDashboard() {
       {showNewProject && (
         <NewProjectModal
           customers={customers}
+          customTypes={customTypes}
           onClose={() => setShowNewProject(false)}
           onCreated={handleProjectCreated}
         />

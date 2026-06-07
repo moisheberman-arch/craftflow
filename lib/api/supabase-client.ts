@@ -20,6 +20,8 @@ import type {
   TouchupStatus,
   ProjectTypeField,
   ProjectTypeAnswer,
+  ProjectFile,
+  CustomProjectType,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -779,6 +781,76 @@ export interface ShopTaskProject {
   openSubtasks: number
   unresolvedQuestions: number
   stepAgeHours: number
+}
+
+// ── Project Files ──────────────────────────────────────────────────────────
+
+export async function getFilesByProjectId(projectId: string): Promise<ProjectFile[]> {
+  const { data, error } = await supabase
+    .from('project_files').select('*').eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as ProjectFile[]
+}
+
+export async function uploadProjectFile(projectId: string, file: File): Promise<ProjectFile> {
+  const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_')
+  const path = `${projectId}/${Date.now()}-${safeName}`
+  const { error: storageErr } = await supabase.storage
+    .from('project-files')
+    .upload(path, file, { upsert: false })
+  if (storageErr) throw storageErr
+  const { data, error } = await supabase.from('project_files').insert({
+    project_id: projectId,
+    file_name: file.name,
+    file_path: path,
+    file_size: file.size,
+    mime_type: file.type || null,
+  }).select().single()
+  if (error) throw error
+  return data as ProjectFile
+}
+
+export function getProjectFileUrl(filePath: string): string {
+  const { data } = supabase.storage.from('project-files').getPublicUrl(filePath)
+  return data.publicUrl
+}
+
+export async function deleteProjectFile(id: string, filePath: string): Promise<void> {
+  await supabase.storage.from('project-files').remove([filePath])
+  const { error } = await supabase.from('project_files').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Custom Project Types ───────────────────────────────────────────────────
+
+export async function getCustomProjectTypes(): Promise<CustomProjectType[]> {
+  const { data, error } = await supabase
+    .from('custom_project_types').select('*').eq('is_active', true).order('name')
+  if (error) throw error
+  return data as CustomProjectType[]
+}
+
+export async function createCustomProjectType(input: { name: string; key: string }): Promise<CustomProjectType> {
+  const { data, error } = await supabase
+    .from('custom_project_types').insert({ ...input, is_active: true }).select().single()
+  if (error) throw error
+  return data as CustomProjectType
+}
+
+export async function updateCustomProjectType(
+  id: string,
+  input: Partial<{ name: string; is_active: boolean }>
+): Promise<CustomProjectType> {
+  const { data, error } = await supabase
+    .from('custom_project_types').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data as CustomProjectType
+}
+
+export async function deleteCustomProjectType(id: string): Promise<void> {
+  const { error } = await supabase.from('custom_project_types').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function getShopTaskProjects(): Promise<ShopTaskProject[]> {
