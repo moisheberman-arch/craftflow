@@ -92,7 +92,6 @@ export default function QuoteAgentPage() {
   const [breakdown, setBreakdown] = useState<{ item: string; amount: string }[]>([])
   const [savingStatus, setSavingStatus] = useState<QuoteStatus | null>(null)
   const [statusSaved, setStatusSaved] = useState(false)
-  const [needsInitialMessage, setNeedsInitialMessage] = useState(false)
 
   // Fix 4: Voice input state
   const [isListening, setIsListening] = useState(false)
@@ -134,20 +133,27 @@ export default function QuoteAgentPage() {
   useEffect(() => {
     async function load() {
       const [p, q] = await Promise.all([getProjectById(id), getQuoteByProjectId(id)])
+
+      // Collect all project context into local variables before touching state
+      let ctx: Record<string, string> = {}
+      let notes: DesignMeetingNote[] = []
+
       if (p?.project_type) {
-        const [fields, answers, notes] = await Promise.all([
+        const [fields, answers, fetchedNotes] = await Promise.all([
           getFieldsByProjectType(p.project_type).catch(() => [] as ProjectTypeField[]),
           getAnswersByProjectId(p.id).catch(() => [] as ProjectTypeAnswer[]),
           getNotesByProjectId(p.id).catch(() => [] as DesignMeetingNote[]),
         ])
-        const ctx: Record<string, string> = {}
         for (const a of answers) {
           const field = fields.find(f => f.id === a.field_id)
           if (field && a.answer) ctx[field.field_label] = a.answer
         }
-        setTypeAnswerContext(ctx)
-        setDesignNotes(notes)
+        notes = fetchedNotes
       }
+
+      // Commit all state at once
+      setTypeAnswerContext(ctx)
+      setDesignNotes(notes)
       setProject(p)
 
       if (q) {
@@ -159,11 +165,43 @@ export default function QuoteAgentPage() {
         if (q.total_price) setFinalPrice(q.total_price)
         const lastAssistant = [...hist].reverse().find(m => m.role === 'assistant')
         if (lastAssistant) setBreakdown(parseBreakdownLines(lastAssistant.content))
+        // Existing conversation — no initial message needed
+        return
       }
-      // No existing conversation — trigger the AI to generate an opening message
-      // We store the project reference so the initial fetch can use it
-      if (!q || (q.ai_conversation_history ?? []).length === 0) {
-        setNeedsInitialMessage(true)
+
+      // No existing conversation — call the API now using LOCAL variables (not state)
+      // to guarantee we have the correct, fully-populated data.
+      setSending(true)
+      const payload = buildProjectPayload(p, ctx, notes)
+      console.log('[quote-agent frontend] firing initial message, payload:', JSON.stringify(payload))
+      try {
+        const res = await fetch('/api/quote-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: id,
+            conversationHistory: [],
+            projectDetails: payload,
+            isInitialLoad: true,
+          }),
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+        console.log('[quote-agent frontend] initial AI message received, length:', data.message?.length)
+        setMessages([{
+          role: 'assistant',
+          content: data.message,
+          timestamp: new Date().toISOString(),
+        }])
+      } catch (err) {
+        console.error('[quote-agent frontend] initial message failed:', err)
+        setMessages([{
+          role: 'assistant',
+          content: "I'm ready to help build a quote for this project. Tell me about the job — dimensions, materials, and any special features — and I'll work through the pricing.",
+          timestamp: new Date().toISOString(),
+        }])
+      } finally {
+        setSending(false)
       }
     }
     load().catch(console.error).finally(() => setLoading(false))
@@ -172,43 +210,6 @@ export default function QuoteAgentPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Fire initial AI message once project is loaded and there's no existing conversation
-  useEffect(() => {
-    if (!needsInitialMessage || !project || loading || sending) return
-    setNeedsInitialMessage(false)
-    setSending(true)
-    const projectPayload = buildProjectPayload(project, typeAnswerContext, designNotes)
-    fetch('/api/quote-agent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId: id,
-        conversationHistory: [],
-        projectDetails: projectPayload,
-        isInitialLoad: true,
-      }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error)
-        const aiMsg: AIMessage = {
-          role: 'assistant',
-          content: data.message,
-          timestamp: new Date().toISOString(),
-        }
-        setMessages([aiMsg])
-      })
-      .catch(err => {
-        setMessages([{
-          role: 'assistant',
-          content: `I'm ready to help build a quote. Tell me about the project — dimensions, materials, and any special features — and I'll work through the pricing.`,
-          timestamp: new Date().toISOString(),
-        }])
-        console.error('Initial AI message failed:', err)
-      })
-      .finally(() => setSending(false))
-  }, [needsInitialMessage, project, loading])
 
   async function ensureQuote(): Promise<Quote> {
     if (quote) return quote
