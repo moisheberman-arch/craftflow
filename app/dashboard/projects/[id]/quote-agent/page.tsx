@@ -34,6 +34,29 @@ const DEFAULT_STEPS = [
   { name: 'Delivery and installation complete', category: 'delivery' as const },
 ]
 
+function buildProjectPayload(
+  project: Project | null,
+  typeAnswerContext: Record<string, string>,
+  designNotes: DesignMeetingNote[]
+) {
+  return {
+    customer: project?.customer?.name,
+    project_type: project?.project_type,
+    status: project?.status,
+    address: project?.address,
+    notes: project?.notes,
+    primary_material: project?.primary_material,
+    width_inches: project?.width_inches,
+    height_inches: project?.height_inches,
+    depth_inches: project?.depth_inches,
+    ceiling_height_inches: project?.ceiling_height_inches,
+    color_finish: project?.color_finish,
+    requested_addons: project?.requested_addons,
+    project_specific_details: Object.keys(typeAnswerContext).length > 0 ? typeAnswerContext : undefined,
+    design_notes: designNotes.length > 0 ? designNotes.map(n => ({ date: n.created_at, notes: n.notes })) : undefined,
+  }
+}
+
 function parseBreakdownLines(text: string): { item: string; amount: string }[] {
   const section = text.match(/COST BREAKDOWN[:\s]*\n?([\s\S]*?)(?=\nCOMPLEXITY|\nFINAL PRICE|$)/i)
   if (!section) return []
@@ -69,6 +92,7 @@ export default function QuoteAgentPage() {
   const [breakdown, setBreakdown] = useState<{ item: string; amount: string }[]>([])
   const [savingStatus, setSavingStatus] = useState<QuoteStatus | null>(null)
   const [statusSaved, setStatusSaved] = useState(false)
+  const [needsInitialMessage, setNeedsInitialMessage] = useState(false)
 
   // Fix 4: Voice input state
   const [isListening, setIsListening] = useState(false)
@@ -133,17 +157,13 @@ export default function QuoteAgentPage() {
         if (q.scope_of_work) setScopeOfWork(q.scope_of_work)
         if (q.complexity_assessment) setComplexity(q.complexity_assessment)
         if (q.total_price) setFinalPrice(q.total_price)
-        // Parse last assistant message for breakdown
         const lastAssistant = [...hist].reverse().find(m => m.role === 'assistant')
         if (lastAssistant) setBreakdown(parseBreakdownLines(lastAssistant.content))
-      } else {
-        // Open with a greeting from the AI
-        const greeting: AIMessage = {
-          role: 'assistant',
-          content: "I'm ready to help you build a quote for this project. I can see the project details. Tell me about the job — dimensions, materials, and any special features — and I'll work through the pricing.",
-          timestamp: new Date().toISOString(),
-        }
-        setMessages([greeting])
+      }
+      // No existing conversation — trigger the AI to generate an opening message
+      // We store the project reference so the initial fetch can use it
+      if (!q || (q.ai_conversation_history ?? []).length === 0) {
+        setNeedsInitialMessage(true)
       }
     }
     load().catch(console.error).finally(() => setLoading(false))
@@ -152,6 +172,43 @@ export default function QuoteAgentPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Fire initial AI message once project is loaded and there's no existing conversation
+  useEffect(() => {
+    if (!needsInitialMessage || !project || loading || sending) return
+    setNeedsInitialMessage(false)
+    setSending(true)
+    const projectPayload = buildProjectPayload(project, typeAnswerContext, designNotes)
+    fetch('/api/quote-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: id,
+        conversationHistory: [],
+        projectDetails: projectPayload,
+        isInitialLoad: true,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        const aiMsg: AIMessage = {
+          role: 'assistant',
+          content: data.message,
+          timestamp: new Date().toISOString(),
+        }
+        setMessages([aiMsg])
+      })
+      .catch(err => {
+        setMessages([{
+          role: 'assistant',
+          content: `I'm ready to help build a quote. Tell me about the project — dimensions, materials, and any special features — and I'll work through the pricing.`,
+          timestamp: new Date().toISOString(),
+        }])
+        console.error('Initial AI message failed:', err)
+      })
+      .finally(() => setSending(false))
+  }, [needsInitialMessage, project, loading])
 
   async function ensureQuote(): Promise<Quote> {
     if (quote) return quote
@@ -190,25 +247,7 @@ export default function QuoteAgentPage() {
         body: JSON.stringify({
           projectId: id,
           conversationHistory: updatedMessages,
-          projectDetails: {
-            customer: project?.customer?.name,
-            project_type: project?.project_type,
-            status: project?.status,
-            address: project?.address,
-            notes: project?.notes,
-            primary_material: project?.primary_material,
-            width_inches: project?.width_inches,
-            height_inches: project?.height_inches,
-            depth_inches: project?.depth_inches,
-            ceiling_height_inches: project?.ceiling_height_inches,
-            color_finish: project?.color_finish,
-            requested_addons: project?.requested_addons,
-            project_specific_details: Object.keys(typeAnswerContext).length > 0 ? typeAnswerContext : undefined,
-            design_notes: designNotes.length > 0 ? designNotes.map(n => ({
-              date: n.created_at,
-              notes: n.notes,
-            })) : undefined,
-          },
+          projectDetails: buildProjectPayload(project, typeAnswerContext, designNotes),
         }),
       })
 

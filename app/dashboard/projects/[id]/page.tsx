@@ -169,7 +169,7 @@ export default function ProjectDetailPage() {
       setPricingAddons(addons)
       setPrimaryMaterial(p.primary_material ?? '')
       setRequestedAddons((p.requested_addons as string[] | undefined) ?? [])
-      // Load project type fields + answers
+      // Load project type fields + answers, then apply smart defaults for empty fields
       if (p.project_type) {
         const [fields, answers] = await Promise.all([
           getFieldsByProjectType(p.project_type).catch(() => [] as ProjectTypeField[]),
@@ -178,6 +178,28 @@ export default function ProjectDetailPage() {
         setTypeFields(fields)
         const answerMap: Record<string, string> = {}
         for (const a of answers) answerMap[a.field_id] = a.answer ?? ''
+
+        // Apply smart defaults for fields that have no saved answer yet
+        const setIfEmpty = (labelPattern: string, value: string) => {
+          const field = fields.find(f => f.field_label.toLowerCase().includes(labelPattern.toLowerCase()))
+          if (field && !answerMap[field.id]) answerMap[field.id] = value
+        }
+        if (p.project_type === 'bookcase') {
+          if (p.width_inches) {
+            const count = Math.floor((p.width_inches as number) / 32)
+            if (count > 0) setIfEmpty('number of bookcase', String(count))
+          }
+          setIfEmpty('floor to ceiling', 'Yes')
+          setIfEmpty('door type', 'With Doors')
+        } else if (p.project_type === 'built_in') {
+          setIfEmpty('floor to ceiling', 'Yes')
+          setIfEmpty('tv recess', 'No')
+          setIfEmpty('arched opening', 'No')
+        } else if (p.project_type === 'dining_table') {
+          setIfEmpty('wants leaves', 'No')
+          setIfEmpty('table width type', 'Standard 42"')
+        }
+
         setTypeAnswers(answerMap)
       }
     }
@@ -544,8 +566,17 @@ export default function ProjectDetailPage() {
                         </div>
                       )}
                       {field.field_type === 'number' && (
-                        <input type="number" value={typeAnswers[field.id] ?? ''} onChange={e => setTypeAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                        <input
+                          type="number"
+                          value={typeAnswers[field.id] ?? ''}
+                          onChange={e => setTypeAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                          placeholder={
+                            field.field_label.toLowerCase().includes('number of bookcase') && !project?.width_inches
+                              ? 'e.g. 4 units for 128" wall'
+                              : undefined
+                          }
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
                       )}
                       {field.field_type === 'dropdown' && (
                         <select value={typeAnswers[field.id] ?? ''} onChange={e => setTypeAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}

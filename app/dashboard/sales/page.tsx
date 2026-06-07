@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   getProjects, createProject, getCustomers, createCustomer,
   updateCustomer, getProjectsByCustomerId, updateProject,
@@ -318,7 +319,7 @@ function NewProjectModal({
   onCreated: (project: Project, newCustomer?: Customer) => void
 }) {
   const [step, setStep] = useState<NewProjectStep>('customer')
-  const [mode, setMode] = useState<'existing' | 'new'>('existing')
+  const [mode, setMode] = useState<'existing' | 'new'>('new')
 
   // Step 1 — customer
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
@@ -568,6 +569,7 @@ function StatusBadgeSelect({
 // ── Sales Dashboard ────────────────────────────────────────────────────────
 
 export default function SalesDashboard() {
+  const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
@@ -589,9 +591,8 @@ export default function SalesDashboard() {
     }
   }, [navigateTo])
 
-  // Fix 1: project created inside modal — just prepend to list, no navigation
+  // Project created — navigate directly to project overview
   function handleProjectCreated(project: Project, newCustomer?: Customer) {
-    // Attach customer info so it renders correctly in the table
     const withCustomer: Project = {
       ...project,
       customer: newCustomer ?? customers.find(c => c.id === project.customer_id),
@@ -601,6 +602,7 @@ export default function SalesDashboard() {
       setCustomers(prev => [...prev, newCustomer].sort((a, b) => a.name.localeCompare(b.name)))
     }
     setShowNewProject(false)
+    router.push(`/dashboard/projects/${project.id}?view=sales`)
   }
 
   // Fix 3: inline status change — update state so project re-groups instantly
