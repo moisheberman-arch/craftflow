@@ -356,7 +356,7 @@ export default function ShopTasksPage() {
                           {t.assigned_to && <p className="text-xs text-gray-400">Assigned: {t.assigned_to}</p>}
                           {t.address && <p className="text-xs text-gray-500 mt-0.5">📍 {t.address}</p>}
                         </div>
-                        <span className="text-xs text-gray-600 shrink-0">{formatAge(t.created_at)}</span>
+                        <span className="text-xs text-gray-600 shrink-0">{formatAge((Date.now() - new Date(t.created_at).getTime()) / 3600000)}</span>
                       </div>
                     </div>
                   ))}
