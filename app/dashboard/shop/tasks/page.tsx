@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import Link from 'next/link'
 import {
   getShopTaskProjects, getCalendarEvents, addCalendarEvent, deleteCalendarEvent,
-  getOpenTouchups,
+  getOpenTouchups, addSubtask, updateSubtask,
   type ShopTaskProject,
 } from '@/lib/api/supabase-client'
-import type { CalendarEvent, CalendarEventType, Touchup } from '@/lib/core/types'
+import type { CalendarEvent, CalendarEventType, Touchup, StepSubtask } from '@/lib/core/types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -165,40 +165,113 @@ function AddEventModal({ date, onSave, onClose }: {
 
 // ── Task Card ──────────────────────────────────────────────────────────────
 
-function TaskCard({ task }: { task: ShopTaskProject }) {
-  const { project, currentStep, openSubtasks, unresolvedQuestions, stepAgeHours } = task
+function TaskCard({ task, onSubtasksChanged }: {
+  task: ShopTaskProject
+  onSubtasksChanged: (stepId: string, newSubtasks: StepSubtask[]) => void
+}) {
+  const { project, currentStep, unresolvedQuestions, stepAgeHours } = task
+  const [subtasks, setSubtasks] = useState<StepSubtask[]>(task.subtasks)
+  const [completingId, setCompletingId] = useState<string | null>(null)
+  const [addingSubtask, setAddingSubtask] = useState(false)
+  const [newSubtaskText, setNewSubtaskText] = useState('')
+  const [savingSubtask, setSavingSubtask] = useState(false)
   const label = `${project.customer?.name ?? 'Unknown'} — ${project.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+
+  async function handleCompleteSubtask(id: string) {
+    setCompletingId(id)
+    try {
+      await updateSubtask(id, { completed: true })
+      const next = subtasks.filter(s => s.id !== id)
+      setSubtasks(next)
+      onSubtasksChanged(currentStep.id, next)
+    } finally { setCompletingId(null) }
+  }
+
+  async function handleAddSubtask() {
+    if (!newSubtaskText.trim()) return
+    setSavingSubtask(true)
+    try {
+      const st = await addSubtask(currentStep.id, project.id, newSubtaskText.trim())
+      const next = [...subtasks, st]
+      setSubtasks(next)
+      onSubtasksChanged(currentStep.id, next)
+      setNewSubtaskText('')
+      setAddingSubtask(false)
+    } finally { setSavingSubtask(false) }
+  }
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
       <div className="flex items-start justify-between">
-        <div>
+        <div className="flex-1 min-w-0">
           <Link href={`/dashboard/projects/${project.id}?view=shop`}
             className="font-semibold text-white hover:text-amber-400 transition-colors text-sm">
             {label}
           </Link>
-          <p className="text-base font-bold text-white mt-1">{currentStep.step_name}</p>
+          <p className="text-sm font-bold text-white mt-0.5 truncate">{currentStep.step_name}</p>
+          {currentStep.step_type === 'waiting' && currentStep.waiting_on && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[10px] text-gray-400">Waiting on:</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${getWaitingColor(currentStep.waiting_on)}`}>
+                {currentStep.waiting_on}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
-          {openSubtasks > 0 && (
-            <span className="text-[10px] font-semibold bg-red-900 text-red-200 px-1.5 py-0.5 rounded">{openSubtasks} subtasks</span>
-          )}
           {unresolvedQuestions > 0 && (
             <span className="text-[10px] font-semibold bg-orange-900 text-orange-200 px-1.5 py-0.5 rounded">{unresolvedQuestions} Qs</span>
           )}
         </div>
       </div>
 
-      {currentStep.step_type === 'waiting' && currentStep.waiting_on && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Waiting on:</span>
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${getWaitingColor(currentStep.waiting_on)}`}>
-            {currentStep.waiting_on}
-          </span>
+      {/* Subtasks */}
+      {subtasks.length > 0 ? (
+        <div className="space-y-1">
+          {subtasks.map(st => (
+            <label key={st.id} className={`flex items-center gap-2 text-sm cursor-pointer group ${completingId === st.id ? 'opacity-50' : ''}`}>
+              <input
+                type="checkbox"
+                checked={false}
+                disabled={completingId === st.id}
+                onChange={() => handleCompleteSubtask(st.id)}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-800 accent-emerald-500 cursor-pointer shrink-0"
+              />
+              <span className="text-gray-200 group-hover:text-white transition-colors">{st.description}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-gray-600">
+          No action items on this step.
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      {/* Inline add subtask */}
+      {addingSubtask ? (
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            placeholder="New action item..."
+            value={newSubtaskText}
+            onChange={e => setNewSubtaskText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); if (e.key === 'Escape') setAddingSubtask(false) }}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+          <button onClick={handleAddSubtask} disabled={savingSubtask || !newSubtaskText.trim()}
+            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg">
+            {savingSubtask ? '...' : 'Add'}
+          </button>
+          <button onClick={() => setAddingSubtask(false)} className="text-gray-500 hover:text-white text-xs px-2">✕</button>
+        </div>
+      ) : (
+        <button onClick={() => setAddingSubtask(true)}
+          className="text-xs text-amber-500 hover:text-amber-400 transition-colors">
+          + Add action item
+        </button>
+      )}
+
+      <div className="flex items-center justify-between pt-1 border-t border-gray-800">
         <span className="text-xs text-gray-500">On this step {formatAge(stepAgeHours)}</span>
         <Link href={`/dashboard/projects/${project.id}?view=shop`}
           className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg transition-colors">
@@ -239,6 +312,15 @@ export default function ShopTasksPage() {
   const waitingSummary = (['customer', 'supplier', 'designer', 'internal'] as const)
     .map(w => ({ label: w, count: waitingTasks.filter(t => t.currentStep.waiting_on === w).length }))
     .filter(x => x.count > 0)
+  const totalItems = tasks.reduce((sum, t) => sum + (t.subtasks.length > 0 ? t.subtasks.length : 1), 0)
+
+  const handleSubtasksChanged = useCallback((stepId: string, newSubtasks: StepSubtask[]) => {
+    setTasks(prev => prev.map(t =>
+      t.currentStep.id === stepId
+        ? { ...t, subtasks: newSubtasks, openSubtasks: newSubtasks.length }
+        : t
+    ))
+  }, [])
 
   const urgentTouchups = touchups.filter(t => t.priority === 'urgent')
 
@@ -252,7 +334,7 @@ export default function ShopTasksPage() {
           <h1 className="text-xl font-bold text-white">
             Today&apos;s Tasks
             {!loading && (
-              <span className="ml-2 text-sm font-normal text-gray-400">({tasks.length} projects active)</span>
+              <span className="ml-2 text-sm font-normal text-gray-400">({totalItems} open items)</span>
             )}
           </h1>
         </div>
@@ -274,7 +356,7 @@ export default function ShopTasksPage() {
                   <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{actionTasks.length}</span>
                 </div>
                 <div className="space-y-3">
-                  {actionTasks.map(t => <TaskCard key={t.project.id} task={t} />)}
+                  {actionTasks.map(t => <TaskCard key={t.project.id} task={t} onSubtasksChanged={handleSubtasksChanged} />)}
                 </div>
               </div>
             )}
@@ -292,7 +374,7 @@ export default function ShopTasksPage() {
                   </p>
                 )}
                 <div className="space-y-3">
-                  {waitingTasks.map(t => <TaskCard key={t.project.id} task={t} />)}
+                  {waitingTasks.map(t => <TaskCard key={t.project.id} task={t} onSubtasksChanged={handleSubtasksChanged} />)}
                 </div>
               </div>
             )}

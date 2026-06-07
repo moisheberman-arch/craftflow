@@ -216,13 +216,26 @@ export async function reorderSteps(projectId: string, orderedIds: string[]): Pro
   )
 }
 
+async function seedSuggestedSubtasksIfEmpty(stepId: string, projectId: string, stepName: string): Promise<void> {
+  const { count } = await supabase
+    .from('step_subtasks').select('id', { count: 'exact', head: true }).eq('step_id', stepId)
+  if (count && count > 0) return
+  const { data: lib } = await supabase
+    .from('step_library').select('suggested_subtasks').eq('step_name', stepName).maybeSingle()
+  const suggestions: string[] = Array.isArray(lib?.suggested_subtasks) ? lib.suggested_subtasks : []
+  if (suggestions.length === 0) return
+  await supabase.from('step_subtasks').insert(
+    suggestions.map(desc => ({ step_id: stepId, project_id: projectId, description: desc, completed: false }))
+  )
+}
+
 export async function setCurrentStep(projectId: string, stepId: string): Promise<void> {
-  // Clear all is_current for project
   await supabase.from('production_steps')
     .update({ is_current: false }).eq('project_id', projectId)
-  // Set the chosen step as current
   await supabase.from('production_steps')
     .update({ is_current: true }).eq('id', stepId)
+  const { data: step } = await supabase.from('production_steps').select('step_name').eq('id', stepId).single()
+  if (step) await seedSuggestedSubtasksIfEmpty(stepId, projectId, step.step_name).catch(console.error)
 }
 
 export async function autoAdvanceCurrentStep(
@@ -251,6 +264,7 @@ export async function autoAdvanceCurrentStep(
   if (nextStep) {
     await supabase.from('production_steps')
       .update({ is_current: true }).eq('id', nextStep.id)
+    await seedSuggestedSubtasksIfEmpty(nextStep.id, projectId, nextStep.step_name).catch(console.error)
     return { nextStep: nextStep as ProductionStep, projectCompleted: false }
   }
 
@@ -778,6 +792,7 @@ export async function saveAllAnswers(
 export interface ShopTaskProject {
   project: Project
   currentStep: ProductionStep
+  subtasks: StepSubtask[]
   openSubtasks: number
   unresolvedQuestions: number
   stepAgeHours: number
@@ -866,17 +881,18 @@ export async function getShopTaskProjects(): Promise<ShopTaskProject[]> {
     const { data: steps } = await supabase
       .from('production_steps').select('*').eq('project_id', p.id).eq('is_current', true).single()
     if (!steps) return
-    const [{ count: subCount }, { count: qCount }] = await Promise.all([
-      supabase.from('step_subtasks').select('id', { count: 'exact', head: true })
-        .eq('step_id', steps.id).eq('completed', false),
+    const [{ data: subtasksData }, { count: qCount }] = await Promise.all([
+      supabase.from('step_subtasks').select('*').eq('step_id', steps.id).eq('completed', false).order('created_at'),
       supabase.from('open_questions').select('id', { count: 'exact', head: true })
         .eq('project_id', p.id).eq('resolved', false),
     ])
+    const openSubtasks = subtasksData ?? []
     const ageHours = (Date.now() - new Date(steps.created_at).getTime()) / 3600000
     results.push({
       project: p as Project,
       currentStep: steps as ProductionStep,
-      openSubtasks: subCount ?? 0,
+      subtasks: openSubtasks as StepSubtask[],
+      openSubtasks: openSubtasks.length,
       unresolvedQuestions: qCount ?? 0,
       stepAgeHours: Math.round(ageHours),
     })

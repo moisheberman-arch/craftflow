@@ -16,6 +16,9 @@ import {
   getAllUnpurchasedShoppingItems,
   updateShoppingListItem,
   seedDefaultStepsIfEmpty,
+  getFilesByProjectId,
+  addSubtask,
+  updateSubtask,
 } from '@/lib/api/supabase-client'
 import type {
   Project, ProductionStep, MaterialItem, StepSubtask,
@@ -37,6 +40,7 @@ interface EnrichedProject extends Project {
   hasNoCurrentStep: boolean
   inQueue: boolean
   queueDays: number
+  hasFiles: boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -410,6 +414,35 @@ function ProjectCard({
         </div>
       </div>
 
+      {/* Missing Info Alerts */}
+      {(() => {
+        const stepOrder = p.currentStep?.sequence_order ?? 0
+        const stepName = p.currentStep?.step_name ?? ''
+        const alerts: { label: string }[] = []
+        if (['Ready for Paint / Stain', 'In Paint Shop', 'Quality Check'].includes(stepName) && !p.color_finish)
+          alerts.push({ label: 'Paint Color' })
+        if (stepOrder > 3 && (!p.width_inches || !p.height_inches || !p.depth_inches))
+          alerts.push({ label: 'Dimensions' })
+        if (stepOrder > 4 && !p.primary_material)
+          alerts.push({ label: 'Wood Species' })
+        if (['Waiting: Customer Approval on Sketch', 'Waiting: Customer Approval on Rendering'].includes(stepName) && !p.hasFiles)
+          alerts.push({ label: 'Sketch/Rendering File' })
+        if (alerts.length === 0) return null
+        return (
+          <div className="flex flex-wrap gap-1 mb-2" onClick={e => e.stopPropagation()}>
+            {alerts.map(a => (
+              <button
+                key={a.label}
+                onClick={() => onNavigate(p.id)}
+                className="text-[10px] font-semibold bg-red-950 border border-red-700 text-red-300 px-1.5 py-0.5 rounded-full hover:bg-red-900 transition-colors"
+              >
+                ⚠ Missing: {a.label}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
+
       {/* Current Step section */}
       {p.currentStep ? (
         <div className="bg-blue-950/30 border border-blue-800/60 rounded-lg px-3 py-2 mb-3">
@@ -593,6 +626,10 @@ export default function ShopDashboard() {
 
   // Today's tasks
   const [taskProjects, setTaskProjects] = useState<ShopTaskProject[]>([])
+  const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null)
+  const [addingSubtaskStepId, setAddingSubtaskStepId] = useState<string | null>(null)
+  const [newSubtaskText, setNewSubtaskText] = useState('')
+  const [savingSubtask, setSavingSubtask] = useState(false)
 
   // Drag state (shared, one card dragged at a time)
   const dragId = useRef<string | null>(null)
@@ -614,11 +651,12 @@ export default function ShopDashboard() {
       )
 
       const enriched = await Promise.all(active.map(async p => {
-        const [steps, materials, subtasks, questions] = await Promise.all([
+        const [steps, materials, subtasks, questions, files] = await Promise.all([
           getStepsByProjectId(p.id).catch(() => [] as ProductionStep[]),
           getMaterialsByProjectId(p.id).catch(() => [] as MaterialItem[]),
           getSubtasksByProjectId(p.id).catch(() => [] as StepSubtask[]),
           getOpenQuestionsByProjectId(p.id).catch(() => [] as OpenQuestion[]),
+          getFilesByProjectId(p.id).catch(() => []),
         ])
         const currentStep = steps.find(s => s.is_current) ?? null
         const nextStep = currentStep
@@ -639,6 +677,7 @@ export default function ShopDashboard() {
           hasNoCurrentStep: !currentStep,
           inQueue,
           queueDays: inQueue && currentStep ? daysSince(currentStep.created_at) : 0,
+          hasFiles: files.length > 0,
         } as EnrichedProject
       }))
 
@@ -879,82 +918,139 @@ export default function ShopDashboard() {
         </div>
 
         {/* Today's Tasks section (~30%) */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-gray-200">
-              Today&apos;s Tasks
-              {taskProjects.length > 0 && (
-                <span className="ml-1.5 text-xs text-gray-500">({taskProjects.length})</span>
-              )}
-            </h2>
-            <Link href="/dashboard/shop/tasks" className="text-xs text-amber-400 hover:text-amber-300">See all →</Link>
-          </div>
+        {(() => {
+          const totalItems = taskProjects.reduce((sum, t) => sum + (t.subtasks.length > 0 ? t.subtasks.length : 1), 0)
 
-          {taskProjects.length === 0 ? (
-            <p className="text-xs text-gray-600 py-2">No active steps set.</p>
-          ) : (
-            <div className="space-y-3">
-              {actionTasks.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Action Required</span>
-                    <span className="text-[10px] text-gray-600">({actionTasks.length})</span>
+          async function handleCompleteSubtask(subtaskId: string, stepId: string) {
+            setCompletingSubtaskId(subtaskId)
+            try {
+              await updateSubtask(subtaskId, { completed: true })
+              setTaskProjects(prev => prev.map(t =>
+                t.currentStep.id === stepId
+                  ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subtaskId), openSubtasks: t.openSubtasks - 1 }
+                  : t
+              ))
+            } finally { setCompletingSubtaskId(null) }
+          }
+
+          async function handleAddSubtask(stepId: string, projectId: string) {
+            if (!newSubtaskText.trim()) return
+            setSavingSubtask(true)
+            try {
+              const st = await addSubtask(stepId, projectId, newSubtaskText.trim())
+              setTaskProjects(prev => prev.map(t =>
+                t.currentStep.id === stepId
+                  ? { ...t, subtasks: [...t.subtasks, st], openSubtasks: t.openSubtasks + 1 }
+                  : t
+              ))
+              setNewSubtaskText('')
+              setAddingSubtaskStepId(null)
+            } finally { setSavingSubtask(false) }
+          }
+
+          function renderTaskItems(tasks: ShopTaskProject[], isAction: boolean) {
+            return tasks.flatMap(t => {
+              const projectLabel = `${t.project.customer?.name ?? 'Unknown'}${t.project.project_type ? ' — ' + t.project.project_type.replace(/_/g, ' ') : ''}`
+              if (t.subtasks.length > 0) {
+                return t.subtasks.map(st => (
+                  <div key={st.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 group">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      disabled={completingSubtaskId === st.id}
+                      onChange={() => handleCompleteSubtask(st.id, t.currentStep.id)}
+                      className="mt-0.5 w-3 h-3 rounded border-gray-600 bg-gray-800 accent-emerald-500 cursor-pointer shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-medium text-white truncate ${completingSubtaskId === st.id ? 'opacity-50' : ''}`}>{st.description}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{projectLabel}</p>
+                    </div>
+                    <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
+                      className="text-gray-600 hover:text-amber-400 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</Link>
                   </div>
-                  <div className="space-y-1">
-                    {actionTasks.map(t => (
-                      <Link
-                        key={t.project.id}
-                        href={`/dashboard/projects/${t.project.id}?view=shop`}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors"
-                      >
-                        <span className="text-[10px] font-semibold bg-emerald-900 text-emerald-200 px-1 py-0.5 rounded uppercase shrink-0">act</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-white truncate">
-                            {t.project.customer?.name ?? 'Unknown'}
-                            {t.project.project_type && <span className="text-gray-500 font-normal"> — {t.project.project_type.replace(/_/g, ' ')}</span>}
-                          </p>
-                          <p className="text-[10px] text-gray-500 truncate">{t.currentStep.step_name}</p>
-                        </div>
-                      </Link>
-                    ))}
+                ))
+              }
+              // No subtasks — show step name with inline add prompt
+              const isAdding = addingSubtaskStepId === t.currentStep.id
+              return [(
+                <div key={t.project.id} className="px-2 py-1.5 rounded-lg hover:bg-gray-800">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold px-1 py-0.5 rounded uppercase shrink-0 ${isAction ? 'bg-emerald-900 text-emerald-200' : 'bg-orange-900 text-orange-200'}`}>
+                      {isAction ? 'act' : 'wait'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-white truncate">{projectLabel}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{t.currentStep.step_name}</p>
+                    </div>
+                    <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
+                      className="text-gray-600 hover:text-amber-400 text-xs shrink-0">→</Link>
                   </div>
+                  {!isAdding ? (
+                    <button
+                      onClick={() => { setAddingSubtaskStepId(t.currentStep.id); setNewSubtaskText('') }}
+                      className="mt-1 text-[10px] text-orange-400 hover:text-orange-300 pl-5"
+                    >⚠ Add action item</button>
+                  ) : (
+                    <div className="mt-1 flex gap-1 pl-5">
+                      <input
+                        autoFocus
+                        placeholder="Action item..."
+                        value={newSubtaskText}
+                        onChange={e => setNewSubtaskText(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(t.currentStep.id, t.project.id); if (e.key === 'Escape') setAddingSubtaskStepId(null) }}
+                        className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+                      />
+                      <button onClick={() => handleAddSubtask(t.currentStep.id, t.project.id)}
+                        disabled={savingSubtask || !newSubtaskText.trim()}
+                        className="text-[10px] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-2 rounded">
+                        {savingSubtask ? '...' : 'Add'}
+                      </button>
+                      <button onClick={() => setAddingSubtaskStepId(null)}
+                        className="text-[10px] text-gray-500 hover:text-white">✕</button>
+                    </div>
+                  )}
                 </div>
-              )}
+              )]
+            })
+          }
 
-              {waitingTasks.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Waiting On</span>
-                    <span className="text-[10px] text-gray-600">({waitingTasks.length})</span>
-                  </div>
-                  <div className="space-y-1">
-                    {waitingTasks.map(t => (
-                      <Link
-                        key={t.project.id}
-                        href={`/dashboard/projects/${t.project.id}?view=shop`}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors"
-                      >
-                        <span className="text-[10px] font-semibold bg-orange-900 text-orange-200 px-1 py-0.5 rounded uppercase shrink-0">wait</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-white truncate">
-                            {t.project.customer?.name ?? 'Unknown'}
-                            {t.project.project_type && <span className="text-gray-500 font-normal"> — {t.project.project_type.replace(/_/g, ' ')}</span>}
-                          </p>
-                          <p className="text-[10px] text-gray-500 truncate">
-                            {t.currentStep.step_name}
-                            {t.currentStep.waiting_on && <span className="text-orange-400/70"> · {t.currentStep.waiting_on}</span>}
-                          </p>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+          return (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-gray-200">
+                  Today&apos;s Tasks
+                  {totalItems > 0 && <span className="ml-1.5 text-xs text-gray-500">({totalItems})</span>}
+                </h2>
+                <Link href="/dashboard/shop/tasks" className="text-xs text-amber-400 hover:text-amber-300">See all →</Link>
+              </div>
+
+              {taskProjects.length === 0 ? (
+                <p className="text-xs text-gray-600 py-2">No active steps set.</p>
+              ) : (
+                <div className="space-y-3">
+                  {actionTasks.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Action Required</span>
+                      </div>
+                      <div className="space-y-0.5">{renderTaskItems(actionTasks, true)}</div>
+                    </div>
+                  )}
+                  {waitingTasks.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Waiting On</span>
+                      </div>
+                      <div className="space-y-0.5">{renderTaskItems(waitingTasks, false)}</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
+          )
+        })()}
 
         {/* Shopping List section (~20%, collapsed by default) */}
         <ShoppingListPanel projects={projects} />

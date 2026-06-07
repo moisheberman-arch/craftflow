@@ -143,6 +143,7 @@ export interface StepLibraryItem {
   waiting_on: WaitingOn | null
   is_optional: boolean
   sequence_order: number | null
+  suggested_subtasks?: string[]
 }
 
 export interface StepSubtask {
