@@ -15,8 +15,9 @@ import {
   getStepLibrary,
   getFieldsByProjectType,
   getAnswersByProjectId,
+  getNotesByProjectId,
 } from '@/lib/api/supabase-client'
-import type { Project, Quote, AIMessage, QuoteStatus, ProjectTypeField, ProjectTypeAnswer } from '@/lib/core/types'
+import type { Project, Quote, AIMessage, QuoteStatus, ProjectTypeField, ProjectTypeAnswer, DesignMeetingNote } from '@/lib/core/types'
 
 const DEFAULT_STEPS = [
   { name: 'Shop drawings / rendering approved', category: 'design' as const },
@@ -54,6 +55,7 @@ export default function QuoteAgentPage() {
 
   const [project, setProject] = useState<Project | null>(null)
   const [typeAnswerContext, setTypeAnswerContext] = useState<Record<string, string>>({})
+  const [designNotes, setDesignNotes] = useState<DesignMeetingNote[]>([])
   const [quote, setQuote] = useState<Quote | null>(null)
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [input, setInput] = useState('')
@@ -109,9 +111,10 @@ export default function QuoteAgentPage() {
     async function load() {
       const [p, q] = await Promise.all([getProjectById(id), getQuoteByProjectId(id)])
       if (p?.project_type) {
-        const [fields, answers] = await Promise.all([
+        const [fields, answers, notes] = await Promise.all([
           getFieldsByProjectType(p.project_type).catch(() => [] as ProjectTypeField[]),
           getAnswersByProjectId(p.id).catch(() => [] as ProjectTypeAnswer[]),
+          getNotesByProjectId(p.id).catch(() => [] as DesignMeetingNote[]),
         ])
         const ctx: Record<string, string> = {}
         for (const a of answers) {
@@ -119,6 +122,7 @@ export default function QuoteAgentPage() {
           if (field && a.answer) ctx[field.field_label] = a.answer
         }
         setTypeAnswerContext(ctx)
+        setDesignNotes(notes)
       }
       setProject(p)
 
@@ -193,9 +197,17 @@ export default function QuoteAgentPage() {
             address: project?.address,
             notes: project?.notes,
             primary_material: project?.primary_material,
-            dimensions: project?.width_inches ? `${project.width_inches}" W × ${project.height_inches}" H × ${project.depth_inches}" D` : undefined,
-            ceiling_height: project?.ceiling_height_inches ? `${project.ceiling_height_inches}"` : undefined,
+            width_inches: project?.width_inches,
+            height_inches: project?.height_inches,
+            depth_inches: project?.depth_inches,
+            ceiling_height_inches: project?.ceiling_height_inches,
+            color_finish: project?.color_finish,
+            requested_addons: project?.requested_addons,
             project_specific_details: Object.keys(typeAnswerContext).length > 0 ? typeAnswerContext : undefined,
+            design_notes: designNotes.length > 0 ? designNotes.map(n => ({
+              date: n.created_at,
+              notes: n.notes,
+            })) : undefined,
           },
         }),
       })

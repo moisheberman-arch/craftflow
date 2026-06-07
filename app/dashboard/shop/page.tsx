@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -12,8 +12,14 @@ import {
   getUnresolvedQuestionsAllProjects,
   getCalendarEvents, addCalendarEvent, deleteCalendarEvent,
   getShopTaskProjects, type ShopTaskProject,
+  autoAdvanceCurrentStep,
+  getAllUnpurchasedShoppingItems,
+  updateShoppingListItem,
 } from '@/lib/api/supabase-client'
-import type { Project, ProductionStep, MaterialItem, StepSubtask, OpenQuestion, CalendarEvent, CalendarEventType } from '@/lib/core/types'
+import type {
+  Project, ProductionStep, MaterialItem, StepSubtask,
+  OpenQuestion, CalendarEvent, CalendarEventType, ProjectStatus, ShoppingListItem,
+} from '@/lib/core/types'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +29,7 @@ interface EnrichedProject extends Project {
   currentStep: ProductionStep | null
   nextStep: ProductionStep | null
   materialsTotal: number
+  materialsOrdered: number
   materialsReceived: number
   openSubtasks: number
   unresolvedQuestions: number
@@ -36,6 +43,12 @@ interface EnrichedProject extends Project {
 function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
 }
+
+const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
+  { value: 'deposit_received', label: 'Deposit Received' },
+  { value: 'in_production', label: 'In Production' },
+  { value: 'completed', label: 'Completed' },
+]
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -169,32 +182,220 @@ function AddEventModal({ date, onSave, onClose }: {
   )
 }
 
-// ── Project Tile Card ──────────────────────────────────────────────────────
+// ── Shopping List Panel ────────────────────────────────────────────────────
 
-function ProjectTile({ p, onStartProduction }: { p: EnrichedProject; onStartProduction: (p: EnrichedProject) => void }) {
+function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
+  const [items, setItems] = useState<ShoppingListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [collapsed, setCollapsed] = useState(true)
+  const [markingId, setMarkingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    getAllUnpurchasedShoppingItems()
+      .then(setItems)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handlePurchased(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    setMarkingId(id)
+    try {
+      await updateShoppingListItem(id, { purchased: true })
+      setItems(prev => prev.filter(i => i.id !== id))
+    } finally {
+      setMarkingId(null)
+    }
+  }
+
+  // Group items by project
+  const byProject = new Map<string, ShoppingListItem[]>()
+  for (const item of items) {
+    if (!byProject.has(item.project_id)) byProject.set(item.project_id, [])
+    byProject.get(item.project_id)!.push(item)
+  }
+
+  function getProjectLabel(item: ShoppingListItem): string {
+    const p = item.project as (Project & { customer?: { name: string } }) | undefined
+    if (!p) {
+      const ep = projects.find(proj => proj.id === item.project_id)
+      if (ep) return `${ep.customer?.name ?? 'Unknown'} — ${ep.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+      return 'Unknown Project'
+    }
+    return `${p.customer?.name ?? 'Unknown'} — ${p.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+      <button
+        onClick={() => setCollapsed(v => !v)}
+        className="w-full flex items-center justify-between mb-1"
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-200">Shopping List</h2>
+          {items.length > 0 && (
+            <span className="text-xs bg-amber-800 text-amber-200 font-bold px-1.5 py-0.5 rounded-full">{items.length}</span>
+          )}
+        </div>
+        <span className="text-gray-500 text-xs">{collapsed ? '▼' : '▲'}</span>
+      </button>
+
+      {!collapsed && (
+        <div className="mt-2">
+          {loading ? (
+            <p className="text-xs text-gray-600 py-1">Loading...</p>
+          ) : items.length === 0 ? (
+            <p className="text-xs text-gray-600 py-1">No unpurchased items.</p>
+          ) : (
+            <div className="space-y-3">
+              {Array.from(byProject.entries()).map(([pid, pidItems]) => {
+                const label = getProjectLabel(pidItems[0])
+                return (
+                  <div key={pid}>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 truncate">{label}</p>
+                    <div className="space-y-0.5">
+                      {pidItems.map(item => (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white group"
+                        >
+                          <input
+                            type="checkbox"
+                            className="w-3 h-3 rounded border-gray-600 bg-gray-800 accent-amber-500 cursor-pointer"
+                            checked={false}
+                            onChange={e => handlePurchased(item.id, e as unknown as React.MouseEvent)}
+                            disabled={markingId === item.id}
+                          />
+                          <span className={`truncate flex-1 ${markingId === item.id ? 'opacity-50' : ''}`}>{item.item}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Project Card ───────────────────────────────────────────────────────────
+
+function ProjectCard({
+  p,
+  onNavigate,
+  onProjectUpdated,
+  isDragOver,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: {
+  p: EnrichedProject
+  onNavigate: (id: string) => void
+  onProjectUpdated: (id: string, updates: Partial<EnrichedProject>) => void
+  isDragOver: boolean
+  onDragStart: (id: string) => void
+  onDragOver: (id: string) => void
+  onDrop: (toId: string) => void
+  onDragEnd: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [savingStatus, setSavingStatus] = useState(false)
+
   const deliveryEnd = p.expected_delivery_end
   const daysLeft = deliveryEnd ? Math.ceil((new Date(deliveryEnd).getTime() - Date.now()) / 86400000) : null
   const deliveryLabel = deliveryEnd ? new Date(deliveryEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
   const deliveryColor = daysLeft === null ? '' : daysLeft < 0 ? 'bg-red-900 text-red-200' : daysLeft <= 14 ? 'bg-orange-900 text-orange-200' : 'bg-emerald-900 text-emerald-200'
 
+  const upcomingSteps = p.steps.filter(s => !s.completed && !s.is_current).slice(0, 3)
+
+  async function handleCompleteStep(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!p.currentStep || completing) return
+    setCompleting(true)
+    try {
+      const result = await autoAdvanceCurrentStep(p.id, p.currentStep.id)
+      const newCurrentStep = result.nextStep
+      const updatedSteps = p.steps.map(s => {
+        if (s.id === p.currentStep!.id) return { ...s, completed: true, is_current: false }
+        if (newCurrentStep && s.id === newCurrentStep.id) return { ...s, is_current: true }
+        return s
+      })
+      const newNextStep = newCurrentStep
+        ? updatedSteps.find(s => !s.completed && !s.is_current && (s.sequence_order ?? 0) > (newCurrentStep.sequence_order ?? 0)) ?? null
+        : null
+      onProjectUpdated(p.id, {
+        steps: updatedSteps,
+        stepsCompleted: updatedSteps.filter(s => s.completed).length,
+        currentStep: newCurrentStep,
+        nextStep: newNextStep,
+        hasNoCurrentStep: !newCurrentStep,
+      })
+      const stepName = result.nextStep?.step_name ?? 'All steps done!'
+      setToast(`Step complete — now: ${stepName}`)
+      setTimeout(() => setToast(null), 3500)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCompleting(false)
+    }
+  }
+
+  async function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    e.stopPropagation()
+    const newStatus = e.target.value as ProjectStatus
+    setSavingStatus(true)
+    try {
+      await updateProject(p.id, { status: newStatus })
+      onProjectUpdated(p.id, { status: newStatus })
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
   return (
-    <Link
-      href={`/dashboard/projects/${p.id}?view=shop`}
-      className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-4 block transition-colors"
+    <div
+      draggable
+      onDragStart={() => onDragStart(p.id)}
+      onDragOver={e => { e.preventDefault(); onDragOver(p.id) }}
+      onDrop={e => { e.preventDefault(); onDrop(p.id) }}
+      onDragEnd={onDragEnd}
+      onClick={() => onNavigate(p.id)}
+      className={`relative bg-gray-900 border rounded-xl p-4 cursor-pointer transition-colors select-none ${
+        isDragOver ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-gray-800 hover:border-blue-700'
+      }`}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <p className="font-bold text-white text-base">{p.customer?.name ?? 'No customer'}</p>
+      {/* Toast */}
+      {toast && (
+        <div
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-emerald-800 text-emerald-100 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap"
+          onClick={e => e.stopPropagation()}
+        >
+          ✓ {toast}
+        </div>
+      )}
+
+      {/* Top row: drag handle + name + badges */}
+      <div className="flex items-start gap-2 mb-3">
+        <span
+          className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing mt-0.5 shrink-0 text-base leading-none"
+          onClick={e => e.stopPropagation()}
+          title="Drag to reorder"
+        >⠿</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-base truncate">{p.customer?.name ?? 'No customer'}</p>
           <p className="text-sm text-gray-400 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-1 justify-end">
+        <div className="flex flex-wrap items-center gap-1 justify-end shrink-0">
           {deliveryLabel && (
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${deliveryColor}`}>
-              {daysLeft !== null && daysLeft < 0 ? '⚠ ' : '📅 '}{deliveryLabel}
+              {daysLeft !== null && daysLeft < 0 ? '⚠ ' : ''}{deliveryLabel}
             </span>
-          )}
-          {p.hasNoCurrentStep && (
-            <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">No Active Step</span>
           )}
           {p.openSubtasks > 0 && (
             <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">{p.openSubtasks} subtasks</span>
@@ -205,10 +406,11 @@ function ProjectTile({ p, onStartProduction }: { p: EnrichedProject; onStartProd
         </div>
       </div>
 
+      {/* Current Step section */}
       {p.currentStep ? (
         <div className="bg-blue-950/30 border border-blue-800/60 rounded-lg px-3 py-2 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-blue-200 truncate">{p.currentStep.step_name}</span>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-semibold text-blue-200 truncate flex-1">{p.currentStep.step_name}</span>
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase shrink-0 ${
               p.currentStep.step_type === 'waiting' ? 'bg-orange-900 text-orange-200' : 'bg-emerald-900 text-emerald-200'
             }`}>{p.currentStep.step_type}</span>
@@ -217,8 +419,15 @@ function ProjectTile({ p, onStartProduction }: { p: EnrichedProject; onStartProd
             )}
           </div>
           {p.nextStep && (
-            <p className="text-xs text-gray-500 mt-1">Next: {p.nextStep.step_name}</p>
+            <p className="text-xs text-gray-500 mb-2">Next: {p.nextStep.step_name}</p>
           )}
+          <button
+            onClick={handleCompleteStep}
+            disabled={completing}
+            className="w-full text-xs font-semibold bg-emerald-800 hover:bg-emerald-700 disabled:opacity-50 text-emerald-100 py-1.5 rounded-md transition-colors"
+          >
+            {completing ? 'Saving...' : '✓ Complete & Advance'}
+          </button>
         </div>
       ) : (
         <div className="bg-red-950/30 border border-red-800/60 rounded-lg px-3 py-2 mb-3">
@@ -226,22 +435,140 @@ function ProjectTile({ p, onStartProduction }: { p: EnrichedProject; onStartProd
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <div>
-          <div className="flex justify-between text-xs text-gray-500 mb-0.5">
-            <span>Steps</span>
-            <span>{p.stepsCompleted}/{p.steps.length}</span>
-          </div>
-          <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full"
-              style={{ width: p.steps.length > 0 ? `${(p.stepsCompleted / p.steps.length) * 100}%` : '0%' }} />
-          </div>
+      {/* Progress bar */}
+      <div className="mb-2">
+        <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+          <span>Steps</span>
+          <span>{p.stepsCompleted}/{p.steps.length}</span>
         </div>
-        <div className="flex justify-between text-xs text-gray-500">
-          <span>Materials: {p.materialsReceived}/{p.materialsTotal} received</span>
+        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div className="h-full bg-blue-500 rounded-full"
+            style={{ width: p.steps.length > 0 ? `${(p.stepsCompleted / p.steps.length) * 100}%` : '0%' }} />
         </div>
       </div>
-    </Link>
+
+      {/* Status + expand row */}
+      <div className="flex items-center justify-between mt-3">
+        <select
+          value={p.status ?? ''}
+          onChange={handleStatusChange}
+          onClick={e => e.stopPropagation()}
+          disabled={savingStatus}
+          className="text-[10px] font-semibold bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-gray-300 focus:outline-none disabled:opacity-50 cursor-pointer"
+        >
+          {STATUS_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
+          className="text-[10px] text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors"
+        >
+          {expanded ? '▲ Hide' : '▼ Details'}
+        </button>
+      </div>
+
+      {/* Expandable details */}
+      {expanded && (
+        <div
+          className="mt-3 pt-3 border-t border-gray-800 grid grid-cols-2 gap-3"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Left: Steps Summary */}
+          <div>
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Steps</p>
+            {upcomingSteps.length > 0 ? (
+              <div className="space-y-0.5">
+                {upcomingSteps.map(s => (
+                  <p key={s.id} className="text-[10px] text-gray-400 truncate">· {s.step_name}</p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-gray-600">No upcoming steps</p>
+            )}
+            {p.openSubtasks > 0 && (
+              <span className="mt-1.5 inline-block text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">
+                {p.openSubtasks} open subtasks
+              </span>
+            )}
+          </div>
+
+          {/* Right: Materials Summary */}
+          <div>
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Materials</p>
+            <p className="text-[10px] text-gray-400">{p.materialsOrdered}/{p.materialsTotal} ordered</p>
+            <p className="text-[10px] text-gray-400">{p.materialsReceived}/{p.materialsTotal} received</p>
+            {p.unresolvedQuestions > 0 && (
+              <span className="mt-1.5 inline-block text-[10px] bg-orange-900 text-orange-200 px-1.5 py-0.5 rounded font-semibold">
+                {p.unresolvedQuestions} open Qs
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── In-Queue Row ───────────────────────────────────────────────────────────
+
+function QueueRow({
+  p,
+  onNavigate,
+  onProjectUpdated,
+  onStartProduction,
+  isDragOver,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: {
+  p: EnrichedProject
+  onNavigate: (id: string) => void
+  onProjectUpdated: (id: string, updates: Partial<EnrichedProject>) => void
+  onStartProduction: (p: EnrichedProject) => void
+  isDragOver: boolean
+  onDragStart: (id: string) => void
+  onDragOver: (id: string) => void
+  onDrop: (toId: string) => void
+  onDragEnd: () => void
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(p.id)}
+      onDragOver={e => { e.preventDefault(); onDragOver(p.id) }}
+      onDrop={e => { e.preventDefault(); onDrop(p.id) }}
+      onDragEnd={onDragEnd}
+      onClick={() => onNavigate(p.id)}
+      className={`bg-gray-900 border rounded-xl px-4 py-3 flex items-center gap-4 cursor-pointer transition-colors ${
+        isDragOver ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-gray-800 hover:border-blue-700'
+      }`}
+    >
+      <span
+        className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing shrink-0 text-base"
+        onClick={e => e.stopPropagation()}
+        title="Drag to reorder"
+      >⠿</span>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-white">
+          {p.customer?.name ?? 'No customer'}
+          <span className="text-gray-400 font-normal ml-2 text-sm capitalize">
+            — {p.project_type?.replace(/_/g, ' ') ?? '—'}
+          </span>
+        </p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          In queue {p.queueDays} {p.queueDays === 1 ? 'day' : 'days'}
+          {p.steps.length > 0 && ` · ${p.stepsCompleted}/${p.steps.length} steps pre-production`}
+        </p>
+      </div>
+      <button
+        onClick={e => { e.stopPropagation(); onStartProduction(p) }}
+        className="text-xs bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+      >
+        Start Production
+      </button>
+    </div>
   )
 }
 
@@ -262,6 +589,11 @@ export default function ShopDashboard() {
 
   // Today's tasks
   const [taskProjects, setTaskProjects] = useState<ShopTaskProject[]>([])
+
+  // Drag state (shared, one card dragged at a time)
+  const dragId = useRef<string | null>(null)
+  const dragSection = useRef<'production' | 'queue' | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -296,6 +628,7 @@ export default function ShopDashboard() {
           currentStep,
           nextStep,
           materialsTotal: materials.length,
+          materialsOrdered: materials.filter(m => m.ordered).length,
           materialsReceived: materials.filter(m => m.received).length,
           openSubtasks: subtasks.filter(s => !s.completed).length,
           unresolvedQuestions: questions.filter(q => !q.resolved).length,
@@ -314,6 +647,14 @@ export default function ShopDashboard() {
     getCalendarEvents(calMonth, calYear).then(setEvents).catch(console.error)
   }, [calMonth, calYear])
 
+  function handleProjectUpdated(id: string, updates: Partial<EnrichedProject>) {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
+  }
+
+  function handleNavigate(id: string) {
+    router.push(`/dashboard/projects/${id}?view=shop`)
+  }
+
   async function handleStartProduction(p: EnrichedProject) {
     const queueStep = p.steps.find(s => s.step_name === 'Ready for Production — In Queue')
     const productionStep = p.steps.find(s => s.step_name === 'Production Started')
@@ -322,6 +663,45 @@ export default function ShopDashboard() {
     if (productionStep) await updateStep(productionStep.id, { is_current: true })
     await updateProject(p.id, { status: 'in_production' })
     router.refresh()
+  }
+
+  // ── Drag handlers ──────────────────────────────────────────────────────
+
+  function handleDragStart(section: 'production' | 'queue', id: string) {
+    dragId.current = id
+    dragSection.current = section
+  }
+
+  function handleDragOver(section: 'production' | 'queue', id: string) {
+    if (dragSection.current === section) setDragOverId(id)
+  }
+
+  async function handleDrop(section: 'production' | 'queue', toId: string) {
+    const fromId = dragId.current
+    if (!fromId || fromId === toId || dragSection.current !== section) return
+
+    const sectionList = section === 'production' ? inProduction : inQueue
+    const fromIdx = sectionList.findIndex(p => p.id === fromId)
+    const toIdx = sectionList.findIndex(p => p.id === toId)
+    if (fromIdx === -1 || toIdx === -1) return
+
+    const reordered = [...sectionList]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+
+    const basePos = section === 'production' ? 1 : 1001
+    const withPositions = reordered.map((p, i) => ({ ...p, queue_position: basePos + i }))
+
+    const other = section === 'production' ? inQueue : inProduction
+    setProjects([...withPositions, ...other].sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999)))
+
+    await Promise.all(withPositions.map(p => updateProject(p.id, { queue_position: p.queue_position ?? null }))).catch(console.error)
+  }
+
+  function handleDragEnd() {
+    dragId.current = null
+    dragSection.current = null
+    setDragOverId(null)
   }
 
   if (loading) return <div className="text-center py-8 text-gray-500">Loading...</div>
@@ -406,7 +786,19 @@ export default function ShopDashboard() {
               <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{inProduction.length}</span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {inProduction.map(p => <ProjectTile key={p.id} p={p} onStartProduction={handleStartProduction} />)}
+              {inProduction.map(p => (
+                <ProjectCard
+                  key={p.id}
+                  p={p}
+                  onNavigate={handleNavigate}
+                  onProjectUpdated={handleProjectUpdated}
+                  isDragOver={dragOverId === p.id}
+                  onDragStart={id => handleDragStart('production', id)}
+                  onDragOver={id => handleDragOver('production', id)}
+                  onDrop={toId => handleDrop('production', toId)}
+                  onDragEnd={handleDragEnd}
+                />
+              ))}
             </div>
           </div>
         )}
@@ -420,32 +812,18 @@ export default function ShopDashboard() {
             </h2>
             <div className="space-y-2">
               {inQueue.map(p => (
-                <div key={p.id} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white">
-                      {p.customer?.name ?? 'No customer'}
-                      <span className="text-gray-400 font-normal ml-2 text-sm capitalize">
-                        — {p.project_type?.replace(/_/g, ' ') ?? '—'}
-                      </span>
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      In queue {p.queueDays} {p.queueDays === 1 ? 'day' : 'days'}
-                      {p.steps.length > 0 && ` · ${p.stepsCompleted}/${p.steps.length} steps pre-production`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Link href={`/dashboard/projects/${p.id}?view=shop`}
-                      className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded border border-gray-700">
-                      View
-                    </Link>
-                    <button
-                      onClick={() => handleStartProduction(p)}
-                      className="text-xs bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      Start Production
-                    </button>
-                  </div>
-                </div>
+                <QueueRow
+                  key={p.id}
+                  p={p}
+                  onNavigate={handleNavigate}
+                  onProjectUpdated={handleProjectUpdated}
+                  onStartProduction={handleStartProduction}
+                  isDragOver={dragOverId === p.id}
+                  onDragStart={id => handleDragStart('queue', id)}
+                  onDragOver={id => handleDragOver('queue', id)}
+                  onDrop={toId => handleDrop('queue', toId)}
+                  onDragEnd={handleDragEnd}
+                />
               ))}
             </div>
           </div>
@@ -456,10 +834,10 @@ export default function ShopDashboard() {
         )}
       </div>
 
-      {/* ── RIGHT PANEL: Calendar + Tasks (35%) — sticky ── */}
+      {/* ── RIGHT PANEL: Calendar + Tasks + Shopping List (35%) — sticky ── */}
       <div className="w-80 xl:w-96 shrink-0 sticky top-6 space-y-4 max-h-[calc(100vh-80px)] overflow-y-auto">
 
-        {/* Calendar section (top ~60%) */}
+        {/* Calendar section (~50%) */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold text-gray-200">Calendar</h2>
@@ -491,7 +869,7 @@ export default function ShopDashboard() {
           )}
         </div>
 
-        {/* Today's Tasks section (bottom ~40%) */}
+        {/* Today's Tasks section (~30%) */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold text-gray-200">
@@ -568,6 +946,9 @@ export default function ShopDashboard() {
             </div>
           )}
         </div>
+
+        {/* Shopping List section (~20%, collapsed by default) */}
+        <ShoppingListPanel projects={projects} />
       </div>
 
       {/* Add Event Modal */}
