@@ -159,14 +159,20 @@ export default function QuoteAgentPage() {
       if (q) {
         setQuote(q)
         const hist = q.ai_conversation_history ?? []
-        setMessages(hist)
-        if (q.scope_of_work) setScopeOfWork(q.scope_of_work)
-        if (q.complexity_assessment) setComplexity(q.complexity_assessment)
-        if (q.total_price) setFinalPrice(q.total_price)
-        const lastAssistant = [...hist].reverse().find(m => m.role === 'assistant')
-        if (lastAssistant) setBreakdown(parseBreakdownLines(lastAssistant.content))
-        // Existing conversation — no initial message needed
-        return
+        // Only restore an existing conversation if the user has actually sent at least one message.
+        // If only an AI opening exists (or history is empty — e.g. from a manual quote), fall through
+        // and regenerate a fresh contextual opening so stale/generic messages don't persist.
+        const hasUserMessages = hist.some(m => m.role === 'user')
+        if (hasUserMessages) {
+          setMessages(hist)
+          if (q.scope_of_work) setScopeOfWork(q.scope_of_work)
+          if (q.complexity_assessment) setComplexity(q.complexity_assessment)
+          if (q.total_price) setFinalPrice(q.total_price)
+          const lastAssistant = [...hist].reverse().find(m => m.role === 'assistant')
+          if (lastAssistant) setBreakdown(parseBreakdownLines(lastAssistant.content))
+          return
+        }
+        // Quote exists but no user messages — regenerate opening with current project context
       }
 
       // No existing conversation — call the API now using LOCAL variables (not state)

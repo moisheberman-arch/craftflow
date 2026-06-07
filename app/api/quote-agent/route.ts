@@ -193,21 +193,20 @@ export async function POST(req: NextRequest) {
 
   console.log('[quote-agent] projectDetailsSection:\n', projectDetailsSection)
 
-  // ── Initial message instruction ──────────────────────────────────────────
-  const initialMessageInstruction = isInitialLoad ? `
-OPENING MESSAGE INSTRUCTIONS:
+  // ── System prompt ────────────────────────────────────────────────────────
+  const openingInstruction = isInitialLoad ? `
+OPENING MESSAGE INSTRUCTIONS (follow these exactly for this first message):
 This is the very first message of the quoting conversation. Do NOT attempt to price anything yet.
-Your response must do all four of the following:
-1. Start with a single greeting line (one sentence).
-2. Output a "What I have so far:" block that lists every field from PROJECT DETAILS above as a clean bullet list — one bullet per field, even if the value is "Not specified." This helps the sales person see at a glance what is captured and what is missing.
-3. Ask targeted follow-up questions for any missing or unclear details needed to build an accurate quote. ${rawType && INITIAL_QUESTIONS[rawType] ? INITIAL_QUESTIONS[rawType] : 'Ask about missing dimensions, finish preferences, and key design decisions.'}
-4. End your message with exactly this sentence on its own line: "Once you confirm these details I'll generate a full quote with pricing breakdown."
-Format the "What I have so far:" section clearly with line breaks. Be concise — no pricing or estimates in this opening message.
+Your response must do all four of the following in order:
+1. One greeting sentence that names the customer and project type.
+2. A "What I have so far:" section — bullet list, one line per field from the PROJECT DETAILS section below. List every field even if the value is "Not specified."
+3. Targeted follow-up questions only for fields that are "Not specified" or unclear. ${rawType && INITIAL_QUESTIONS[rawType] ? INITIAL_QUESTIONS[rawType] : 'Ask about missing dimensions, finish preferences, and key design decisions.'}
+4. End with exactly: "Once you confirm these details I'll generate a full quote with pricing breakdown."
+Be concise. No pricing or estimates in this first message.
 ` : ''
 
-  // ── System prompt ────────────────────────────────────────────────────────
   const systemPrompt = `You are an expert estimator for a high-end custom furniture and millwork shop. You help the sales team build accurate, detailed quotes for custom projects including dining tables, built-in entertainment centers, bookcases, bars, study built-ins, desks, and buffets.
-${initialMessageInstruction}
+${openingInstruction}
 PRICING RULES:
 - Base markup rule: raw material cost is approximately 30% of the final sell price (roughly 70% markup). This is a starting point, not a hard rule.
 - Complexity adjustment: assess labor intensity separately from material cost. Highly intricate work (curves, custom inlay, complex millwork, arched openings, hand-carved details) warrants a higher markup. Simple linear scaling does not increase markup proportionally.
@@ -258,6 +257,7 @@ BEHAVIOR RULES:
     )
   }
 
+  console.log('[quote-agent] SYSTEM PROMPT (full):\n', systemPrompt)
   console.log('[quote-agent] sending', chatMessages.length, 'messages to OpenAI')
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
