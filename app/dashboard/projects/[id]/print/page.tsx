@@ -9,8 +9,10 @@ import {
   getSubtasksByStepId,
   getOpenQuestionsByProjectId,
   getPricingAddons,
+  getFieldsByProjectType,
+  getAnswersByProjectId,
 } from '@/lib/api/supabase-client'
-import type { Project, MaterialItem, ProductionStep, StepSubtask, OpenQuestion, PricingAddon, Customer } from '@/lib/core/types'
+import type { Project, MaterialItem, ProductionStep, StepSubtask, OpenQuestion, PricingAddon, Customer, ProjectTypeField, ProjectTypeAnswer } from '@/lib/core/types'
 
 export default function PrintJobSheetPage() {
   const { id } = useParams<{ id: string }>()
@@ -20,6 +22,8 @@ export default function PrintJobSheetPage() {
   const [currentSubtasks, setCurrentSubtasks] = useState<StepSubtask[]>([])
   const [questions, setQuestions] = useState<OpenQuestion[]>([])
   const [addons, setAddons] = useState<PricingAddon[]>([])
+  const [typeFields, setTypeFields] = useState<ProjectTypeField[]>([])
+  const [typeAnswers, setTypeAnswers] = useState<ProjectTypeAnswer[]>([])
   const [loading, setLoading] = useState(true)
   const [printDate] = useState(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))
 
@@ -37,6 +41,14 @@ export default function PrintJobSheetPage() {
       setSteps(s)
       setQuestions(q.filter(q => !q.resolved))
       setAddons(a)
+      if (p?.project_type) {
+        const [fields, answers] = await Promise.all([
+          getFieldsByProjectType(p.project_type).catch(() => [] as ProjectTypeField[]),
+          getAnswersByProjectId(p.id).catch(() => [] as ProjectTypeAnswer[]),
+        ])
+        setTypeFields(fields)
+        setTypeAnswers(answers)
+      }
       const curr = s.find(x => x.is_current)
       if (curr) {
         const subs = await getSubtasksByStepId(curr.id).catch(() => [] as StepSubtask[])
@@ -54,6 +66,9 @@ export default function PrintJobSheetPage() {
   const completedCount = steps.filter(s => s.completed).length
   const requestedAddonIds = (project.requested_addons as string[] | undefined) ?? []
   const requestedAddonNames = addons.filter(a => requestedAddonIds.includes(a.id)).map(a => a.name)
+  const answerMap: Record<string, string> = {}
+  for (const a of typeAnswers) answerMap[a.field_id] = a.answer ?? ''
+  const answeredFields = typeFields.filter(f => answerMap[f.id])
 
   const STATUS_LABELS: Record<string, string> = {
     lead: 'Lead', tentative_quote_sent: 'Tentative Quote Sent',
@@ -164,9 +179,34 @@ export default function PrintJobSheetPage() {
               <div className="value">{project.primary_material}</div>
             </div>
           )}
+          {(project.expected_delivery_start || project.expected_delivery_end) && (
+            <div className="field">
+              <div className="label">Expected Delivery</div>
+              <div className="value">
+                {project.expected_delivery_start ? new Date(project.expected_delivery_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                {project.expected_delivery_start && project.expected_delivery_end ? ' — ' : ''}
+                {project.expected_delivery_end ? new Date(project.expected_delivery_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Section 2: Key Details */}
+        {/* Section 2: Project Type Answers */}
+        {answeredFields.length > 0 && (
+          <>
+            <h2>Project Details — {project.project_type?.replace(/_/g, ' ')}</h2>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              {answeredFields.map(field => (
+                <div key={field.id} className="field" style={{ minWidth: 180 }}>
+                  <div className="label">{field.field_label}</div>
+                  <div className="value">{answerMap[field.id]}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Section 3 (was 2): Key Details */}
         <h2>Key Details</h2>
         <div className="row">
           {(project.width_inches || project.height_inches || project.depth_inches) && (

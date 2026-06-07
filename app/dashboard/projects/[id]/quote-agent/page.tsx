@@ -13,8 +13,10 @@ import {
   addMaterial,
   addStep,
   getStepLibrary,
+  getFieldsByProjectType,
+  getAnswersByProjectId,
 } from '@/lib/api/supabase-client'
-import type { Project, Quote, AIMessage, QuoteStatus } from '@/lib/core/types'
+import type { Project, Quote, AIMessage, QuoteStatus, ProjectTypeField, ProjectTypeAnswer } from '@/lib/core/types'
 
 const DEFAULT_STEPS = [
   { name: 'Shop drawings / rendering approved', category: 'design' as const },
@@ -51,6 +53,7 @@ export default function QuoteAgentPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const [project, setProject] = useState<Project | null>(null)
+  const [typeAnswerContext, setTypeAnswerContext] = useState<Record<string, string>>({})
   const [quote, setQuote] = useState<Quote | null>(null)
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [input, setInput] = useState('')
@@ -105,6 +108,18 @@ export default function QuoteAgentPage() {
   useEffect(() => {
     async function load() {
       const [p, q] = await Promise.all([getProjectById(id), getQuoteByProjectId(id)])
+      if (p?.project_type) {
+        const [fields, answers] = await Promise.all([
+          getFieldsByProjectType(p.project_type).catch(() => [] as ProjectTypeField[]),
+          getAnswersByProjectId(p.id).catch(() => [] as ProjectTypeAnswer[]),
+        ])
+        const ctx: Record<string, string> = {}
+        for (const a of answers) {
+          const field = fields.find(f => f.id === a.field_id)
+          if (field && a.answer) ctx[field.field_label] = a.answer
+        }
+        setTypeAnswerContext(ctx)
+      }
       setProject(p)
 
       if (q) {
@@ -177,6 +192,10 @@ export default function QuoteAgentPage() {
             status: project?.status,
             address: project?.address,
             notes: project?.notes,
+            primary_material: project?.primary_material,
+            dimensions: project?.width_inches ? `${project.width_inches}" W × ${project.height_inches}" H × ${project.depth_inches}" D` : undefined,
+            ceiling_height: project?.ceiling_height_inches ? `${project.ceiling_height_inches}"` : undefined,
+            project_specific_details: Object.keys(typeAnswerContext).length > 0 ? typeAnswerContext : undefined,
           },
         }),
       })

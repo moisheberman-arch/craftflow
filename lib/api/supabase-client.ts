@@ -18,6 +18,8 @@ import type {
   CalendarEventType,
   Touchup,
   TouchupStatus,
+  ProjectTypeField,
+  ProjectTypeAnswer,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -90,9 +92,19 @@ export async function updateProject(
   id: string,
   input: Partial<Omit<Project, 'id' | 'created_at' | 'customer'>>
 ): Promise<Project> {
+  const patch: Record<string, unknown> = { ...input, updated_at: new Date().toISOString() }
+  // Auto-set deposit date and delivery window when status moves to deposit_received
+  if (input.status === 'deposit_received' && !input.deposit_date) {
+    const now = new Date()
+    patch.deposit_date = now.toISOString()
+    const start = new Date(now); start.setDate(start.getDate() + 56)
+    const end = new Date(now); end.setDate(end.getDate() + 70)
+    patch.expected_delivery_start = start.toISOString().slice(0, 10)
+    patch.expected_delivery_end = end.toISOString().slice(0, 10)
+  }
   const { data, error } = await supabase
     .from('projects')
-    .update({ ...input, updated_at: new Date().toISOString() })
+    .update(patch)
     .eq('id', id).select().single()
   if (error) throw error
   return data as Project
@@ -664,6 +676,98 @@ export async function updateTouchup(
 
 export async function deleteTouchup(id: string): Promise<void> {
   const { error } = await supabase.from('touchups').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Project Type Fields ────────────────────────────────────────────────────
+
+export async function getFieldsByProjectType(projectType: string): Promise<ProjectTypeField[]> {
+  const { data, error } = await supabase
+    .from('project_type_fields')
+    .select('*')
+    .eq('project_type', projectType)
+    .eq('is_active', true)
+    .order('sequence_order')
+  if (error) throw error
+  return data as ProjectTypeField[]
+}
+
+export async function getAllProjectTypeFields(): Promise<ProjectTypeField[]> {
+  const { data, error } = await supabase
+    .from('project_type_fields')
+    .select('*')
+    .order('project_type')
+    .order('sequence_order')
+  if (error) throw error
+  return data as ProjectTypeField[]
+}
+
+export async function addProjectTypeField(
+  input: Omit<ProjectTypeField, 'id' | 'created_at'>
+): Promise<ProjectTypeField> {
+  const { data, error } = await supabase.from('project_type_fields').insert(input).select().single()
+  if (error) throw error
+  return data as ProjectTypeField
+}
+
+export async function updateProjectTypeField(
+  id: string,
+  input: Partial<Omit<ProjectTypeField, 'id' | 'created_at'>>
+): Promise<ProjectTypeField> {
+  const { data, error } = await supabase
+    .from('project_type_fields').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data as ProjectTypeField
+}
+
+export async function deleteProjectTypeField(id: string): Promise<void> {
+  const { error } = await supabase.from('project_type_fields').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function reorderProjectTypeFields(projectType: string, orderedIds: string[]): Promise<void> {
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase.from('project_type_fields')
+        .update({ sequence_order: index + 1 })
+        .eq('id', id).eq('project_type', projectType)
+    )
+  )
+}
+
+// ── Project Type Answers ───────────────────────────────────────────────────
+
+export async function getAnswersByProjectId(projectId: string): Promise<ProjectTypeAnswer[]> {
+  const { data, error } = await supabase
+    .from('project_type_answers')
+    .select('*')
+    .eq('project_id', projectId)
+  if (error) throw error
+  return data as ProjectTypeAnswer[]
+}
+
+export async function saveAnswer(
+  projectId: string,
+  fieldId: string,
+  answer: string
+): Promise<ProjectTypeAnswer> {
+  const { data, error } = await supabase
+    .from('project_type_answers')
+    .upsert({ project_id: projectId, field_id: fieldId, answer }, { onConflict: 'project_id,field_id' })
+    .select().single()
+  if (error) throw error
+  return data as ProjectTypeAnswer
+}
+
+export async function saveAllAnswers(
+  projectId: string,
+  answers: { fieldId: string; answer: string }[]
+): Promise<void> {
+  if (answers.length === 0) return
+  const rows = answers.map(a => ({ project_id: projectId, field_id: a.fieldId, answer: a.answer }))
+  const { error } = await supabase
+    .from('project_type_answers')
+    .upsert(rows, { onConflict: 'project_id,field_id' })
   if (error) throw error
 }
 

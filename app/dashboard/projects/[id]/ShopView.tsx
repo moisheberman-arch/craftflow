@@ -197,14 +197,25 @@ export default function ShopView({ project: initialProject }: { project: Project
 
   const [pType, setPType] = useState<ProjectType | ''>(project.project_type ?? '')
   const [pStatus, setPStatus] = useState<ProjectStatus | ''>(project.status ?? '')
-  const [colorFinishText, setColorFinishText] = useState('')
-  // Fix 1: pre-populate from project data
+  const [colorFinishText, setColorFinishText] = useState(project.color_finish ?? '')
   const [woodSpecies, setWoodSpecies] = useState(project.primary_material ?? '')
   const [dimWidth, setDimWidth] = useState(project.width_inches != null ? String(project.width_inches) : '')
   const [dimHeight, setDimHeight] = useState(project.height_inches != null ? String(project.height_inches) : '')
   const [dimDepth, setDimDepth] = useState(project.depth_inches != null ? String(project.depth_inches) : '')
   const [ceilingHeight, setCeilingHeight] = useState(project.ceiling_height_inches != null ? String(project.ceiling_height_inches) : '')
   const [pNotes, setPNotes] = useState(project.notes ?? '')
+
+  // Step-specific data capture state
+  const [stepDataSaving, setStepDataSaving] = useState(false)
+  const [stepDataSaved, setStepDataSaved] = useState(false)
+  const [measureWidth, setMeasureWidth] = useState(project.width_inches != null ? String(project.width_inches) : '')
+  const [measureHeight, setMeasureHeight] = useState(project.height_inches != null ? String(project.height_inches) : '')
+  const [measureDepth, setMeasureDepth] = useState(project.depth_inches != null ? String(project.depth_inches) : '')
+  const [measureCeiling, setMeasureCeiling] = useState(project.ceiling_height_inches != null ? String(project.ceiling_height_inches) : '')
+  const [measureNotes, setMeasureNotes] = useState('')
+  const [finishColor, setFinishColor] = useState(project.color_finish ?? '')
+  const [approvalDate, setApprovalDate] = useState('')
+  const [approvalCustomerNotes, setApprovalCustomerNotes] = useState('')
   const [savingDetails, setSavingDetails] = useState(false)
   const [detailsSaved, setDetailsSaved] = useState(false)
 
@@ -310,6 +321,35 @@ export default function ShopView({ project: initialProject }: { project: Project
       setContactSaved(true)
       setTimeout(() => setContactSaved(false), 2000)
     } finally { setSavingContact(false) }
+  }
+
+  // ── Delivery window helpers ──────────────────────────────────────────────
+  function deliveryDisplay() {
+    const start = project.expected_delivery_start
+    const end = project.expected_delivery_end
+    if (!end) return null
+    const endDate = new Date(end)
+    const daysLeft = Math.ceil((endDate.getTime() - Date.now()) / 86400000)
+    const fmt = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const label = start ? `${fmt(start)} — ${fmt(end)}` : fmt(end)
+    const color = daysLeft < 0
+      ? 'bg-red-900 text-red-200'
+      : daysLeft <= 7
+      ? 'bg-orange-900 text-orange-200'
+      : 'bg-emerald-900 text-emerald-200'
+    const icon = daysLeft < 0 ? '⚠ ' : '📅 '
+    return { label, color, icon, daysLeft }
+  }
+
+  // ── Step-specific data save ───────────────────────────────────────────────
+  async function saveStepData(patch: Parameters<typeof updateProject>[1]) {
+    setStepDataSaving(true)
+    try {
+      const updated = await updateProject(id, patch)
+      setProject(updated)
+      setStepDataSaved(true)
+      setTimeout(() => setStepDataSaved(false), 2000)
+    } finally { setStepDataSaving(false) }
   }
 
   // ── Details save — writes primary_material + dimensions back to project ──
@@ -538,57 +578,38 @@ export default function ShopView({ project: initialProject }: { project: Project
         {/* ── LEFT COLUMN ── */}
         <div className="w-[35%] shrink-0 space-y-4 overflow-y-auto pr-1">
 
-          {/* Card 1: Project Info */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-200">Project Info</h3>
-            <div className="space-y-2">
-              <div>
-                <label className="text-xs text-gray-400">Name</label>
-                <input value={cName} onChange={e => setCName(e.target.value)}
-                  className="w-full mt-0.5 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400">Status</label>
-                <select value={pStatus} onChange={async e => {
-                  const s = e.target.value as ProjectStatus
-                  setPStatus(s)
-                  const u = await updateProject(id, { status: s })
-                  setProject(u)
-                }} className="w-full mt-0.5 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none">
-                  {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-400">Phone</label>
-                  {customer?.phone ? (
-                    <a href={`tel:${customer.phone}`} className="block mt-0.5 text-sm text-amber-400 hover:underline">{customer.phone}</a>
-                  ) : (
-                    <input value={cPhone} onChange={e => setCPhone(e.target.value)}
-                      className="w-full mt-0.5 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+          {/* Card 1: Project Info — read-only compact */}
+          {(() => {
+            const delivery = deliveryDisplay()
+            return (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-white text-base leading-tight">{customer?.name ?? 'Unknown'}</p>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${
+                    project.status === 'in_production' ? 'bg-orange-900 text-orange-200' :
+                    project.status === 'deposit_received' ? 'bg-green-900 text-green-200' :
+                    'bg-gray-700 text-gray-300'
+                  }`}>{project.status ? STATUS_LABELS[project.status as ProjectStatus] : '—'}</span>
+                  {delivery && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${delivery.color}`}>
+                      {delivery.icon}{delivery.label}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1 text-xs text-gray-400">
+                  {customer?.phone && (
+                    <div><a href={`tel:${customer.phone}`} className="text-amber-400 hover:underline">{customer.phone}</a></div>
+                  )}
+                  {customer?.email && (
+                    <div><a href={`mailto:${customer.email}`} className="text-amber-400 hover:underline truncate block">{customer.email}</a></div>
+                  )}
+                  {(project.address || customer?.address) && (
+                    <div className="text-gray-500">{project.address ?? customer?.address}</div>
                   )}
                 </div>
               </div>
-              <div>
-                <label className="text-xs text-gray-400">Email</label>
-                {customer?.email ? (
-                  <a href={`mailto:${customer.email}`} className="block mt-0.5 text-sm text-amber-400 hover:underline truncate">{customer.email}</a>
-                ) : (
-                  <input value={cEmail} onChange={e => setCEmail(e.target.value)} type="email"
-                    className="w-full mt-0.5 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
-                )}
-              </div>
-              <div>
-                <label className="text-xs text-gray-400">Address</label>
-                <input value={cAddress} onChange={e => setCAddress(e.target.value)}
-                  className="w-full mt-0.5 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
-              </div>
-            </div>
-            <button onClick={saveContact} disabled={savingContact}
-              className="w-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-sm text-white py-1.5 rounded-lg transition-colors">
-              {savingContact ? 'Saving...' : contactSaved ? '✓ Saved' : 'Save Contact'}
-            </button>
-          </div>
+            )
+          })()}
 
           {/* Card 2: Key Details */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
@@ -809,6 +830,66 @@ export default function ShopView({ project: initialProject }: { project: Project
                     ))}
                   </div>
                 )}
+                {/* Step-specific data capture */}
+                {currentStep.step_name.toLowerCase().includes('measurements taken') && (
+                  <div className="bg-blue-950/30 border border-blue-800/40 rounded-lg p-3 space-y-2 mb-3">
+                    <p className="text-xs font-semibold text-blue-300 uppercase tracking-wide">Record Measurements</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[['Width"', measureWidth, setMeasureWidth], ['Height"', measureHeight, setMeasureHeight], ['Depth"', measureDepth, setMeasureDepth], ['Ceiling"', measureCeiling, setMeasureCeiling]] .map(([label, val, setter]) => (
+                        <div key={label as string}>
+                          <label className="text-[10px] text-gray-400">{label as string}</label>
+                          <input type="number" value={val as string} onChange={e => (setter as (v: string) => void)(e.target.value)}
+                            className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none mt-0.5" />
+                        </div>
+                      ))}
+                    </div>
+                    <input placeholder="Additional notes..." value={measureNotes} onChange={e => setMeasureNotes(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none" />
+                    <button disabled={stepDataSaving} onClick={() => saveStepData({
+                      width_inches: measureWidth ? parseFloat(measureWidth) : null,
+                      height_inches: measureHeight ? parseFloat(measureHeight) : null,
+                      depth_inches: measureDepth ? parseFloat(measureDepth) : null,
+                      ceiling_height_inches: measureCeiling ? parseFloat(measureCeiling) : null,
+                      notes: measureNotes || project.notes || null,
+                    })} className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs py-1.5 rounded-lg font-semibold">
+                      {stepDataSaving ? 'Saving...' : stepDataSaved ? '✓ Saved' : 'Save Measurements'}
+                    </button>
+                  </div>
+                )}
+
+                {(currentStep.step_name.toLowerCase().includes('finish color') || currentStep.step_name.toLowerCase().includes('color confirmed')) && (
+                  <div className="bg-blue-950/30 border border-blue-800/40 rounded-lg p-3 space-y-2 mb-3">
+                    <p className="text-xs font-semibold text-blue-300 uppercase tracking-wide">Confirm Color / Finish</p>
+                    <input placeholder="e.g. BM White Dove, natural walnut..." value={finishColor} onChange={e => setFinishColor(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none" />
+                    <button disabled={stepDataSaving || !finishColor.trim()} onClick={() => saveStepData({ color_finish: finishColor.trim() })}
+                      className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs py-1.5 rounded-lg font-semibold">
+                      {stepDataSaving ? 'Saving...' : stepDataSaved ? '✓ Saved' : 'Save Color'}
+                    </button>
+                  </div>
+                )}
+
+                {(currentStep.step_name.toLowerCase().includes('approval on sketch') || currentStep.step_name.toLowerCase().includes('approval on rendering')) && (
+                  <div className="bg-blue-950/30 border border-blue-800/40 rounded-lg p-3 space-y-2 mb-3">
+                    <p className="text-xs font-semibold text-blue-300 uppercase tracking-wide">Record Approval</p>
+                    <div>
+                      <label className="text-[10px] text-gray-400">Approval Date</label>
+                      <input type="date" value={approvalDate} onChange={e => setApprovalDate(e.target.value)}
+                        className="w-full mt-0.5 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none" />
+                    </div>
+                    <textarea placeholder="Customer notes..." rows={2} value={approvalCustomerNotes} onChange={e => setApprovalCustomerNotes(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none resize-none" />
+                    <button disabled={stepDataSaving} onClick={() => saveStepData({
+                      approval_notes: {
+                        ...(project.approval_notes ?? {}),
+                        [currentStep.step_name]: { date: approvalDate, notes: approvalCustomerNotes },
+                      },
+                    })} className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs py-1.5 rounded-lg font-semibold">
+                      {stepDataSaving ? 'Saving...' : stepDataSaved ? '✓ Saved' : 'Save Approval'}
+                    </button>
+                  </div>
+                )}
+
                 <button
                   onClick={handleMarkCompleteAndAdvance}
                   disabled={advancing}

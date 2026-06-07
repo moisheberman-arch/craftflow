@@ -43,7 +43,35 @@ export interface Project {
   height_inches?: number | null
   depth_inches?: number | null
   ceiling_height_inches?: number | null
+  color_finish?: string | null
+  deposit_date?: string | null
+  expected_delivery_start?: string | null
+  expected_delivery_end?: string | null
+  approval_notes?: Record<string, unknown> | null
   customer?: Customer
+}
+
+export type ProjectTypeFieldType = 'yes_no' | 'number' | 'dropdown' | 'text'
+
+export interface ProjectTypeField {
+  id: string
+  created_at: string
+  project_type: string
+  field_label: string
+  field_key: string
+  field_type: ProjectTypeFieldType
+  field_options: string[]
+  affects_price: boolean
+  sequence_order: number
+  is_active: boolean
+}
+
+export interface ProjectTypeAnswer {
+  id: string
+  project_id: string
+  field_id: string
+  answer: string | null
+  created_at: string
 }
 
 export type CalendarEventType = 'appointment' | 'reminder' | 'milestone' | 'other'

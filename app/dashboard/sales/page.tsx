@@ -659,50 +659,37 @@ export default function SalesDashboard() {
                   <h2 className="font-bold text-white">{STATUS_LABELS[status]}</h2>
                   <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{group.length}</span>
                 </div>
-                <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-800 text-left">
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</th>
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Project Type</th>
-                        {/* Fix 3: status column header */}
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Updated</th>
-                        <th className="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Open</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.map(project => (
-                        <tr key={project.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/40">
-                          <td className="px-4 py-3 text-sm font-medium">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {group.map(project => (
+                    <div key={project.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2.5 hover:border-gray-700 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-white text-sm truncate">
                             {project.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-300 capitalize">
-                            {project.project_type?.replace(/_/g, ' ') ?? <span className="text-gray-500 italic">—</span>}
-                          </td>
-                          {/* Fix 3: inline status badge-dropdown */}
-                          <td className="px-4 py-3">
-                            <StatusBadgeSelect
-                              projectId={project.id}
-                              currentStatus={project.status}
-                              onStatusChanged={handleStatusChanged}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-400">
-                            {new Date(project.updated_at).toLocaleDateString()}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Link
-                              href={`/dashboard/projects/${project.id}?view=sales`}
-                              className="text-sm text-amber-400 hover:text-amber-300"
-                            >
-                              View →
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </p>
+                          <p className="text-xs text-gray-400 capitalize mt-0.5">
+                            {project.project_type?.replace(/_/g, ' ') ?? '—'}
+                          </p>
+                        </div>
+                        <StatusBadgeSelect
+                          projectId={project.id}
+                          currentStatus={project.status}
+                          onStatusChanged={handleStatusChanged}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-auto">
+                        <span className="text-xs text-gray-600">
+                          {new Date(project.updated_at).toLocaleDateString()}
+                        </span>
+                        <Link
+                          href={`/dashboard/projects/${project.id}?view=sales`}
+                          className="text-xs text-amber-400 hover:text-amber-300 font-medium"
+                        >
+                          View →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )

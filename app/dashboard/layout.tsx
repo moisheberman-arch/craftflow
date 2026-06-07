@@ -14,6 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isShop = pathname.startsWith('/dashboard/shop')
   const isSettings = pathname.startsWith('/dashboard/settings')
   const isTouchups = pathname.startsWith('/dashboard/touchups')
+  const isMaster = pathname.startsWith('/dashboard/master')
 
   useEffect(() => {
     getOpenTouchups()
@@ -54,6 +55,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="flex items-center gap-4">
           <Link
+            href="/dashboard/master"
+            className={`text-sm transition-colors ${isMaster ? 'text-amber-400' : 'text-gray-400 hover:text-white'}`}
+          >
+            Master Doc
+          </Link>
+          <Link
             href="/dashboard/touchups"
             className={`text-sm transition-colors flex items-center gap-1.5 ${
               isTouchups ? 'text-amber-400' : 'text-gray-400 hover:text-white'
@@ -66,14 +73,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </span>
             )}
           </Link>
-          <Link
-            href="/dashboard/settings/pricing"
-            className={`text-sm transition-colors ${
-              isSettings ? 'text-amber-400' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Settings
-          </Link>
+          <div className="relative group">
+            <button className={`text-sm transition-colors ${isSettings ? 'text-amber-400' : 'text-gray-400 hover:text-white'}`}>
+              Settings ▾
+            </button>
+            <div className="absolute right-0 top-full pt-1 hidden group-hover:block z-50">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg shadow-xl overflow-hidden min-w-[160px]">
+                <Link href="/dashboard/settings/pricing" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Pricing Config</Link>
+                <Link href="/dashboard/settings/project-types" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Project Types</Link>
+              </div>
+            </div>
+          </div>
           <button
             onClick={handleLogout}
             className="text-sm text-gray-400 hover:text-white transition-colors"

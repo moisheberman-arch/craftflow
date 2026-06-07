@@ -13,13 +13,15 @@ import {
   getQuoteByProjectId,
   getNotesByProjectId, addDesignMeetingNote, deleteNote,
   getPricingAddons, deleteProject, getProjectCountByCustomerId, deleteCustomer,
+  getFieldsByProjectType, getAnswersByProjectId, saveAllAnswers,
 } from '@/lib/api/supabase-client'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
   Quote, ProjectStatus, ProjectType, DesignMeetingNote, PricingAddon,
+  ProjectTypeField, ProjectTypeAnswer,
 } from '@/lib/core/types'
 
-const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
+const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'bar', 'desk', 'other']
 const STATUSES: ProjectStatus[] = [
   'lead', 'tentative_quote_sent', 'design_meeting_scheduled',
   'post_design_meeting', 'rendering_in_progress', 'final_quote_issued',
@@ -100,6 +102,11 @@ export default function ProjectDetailPage() {
 
   // Pricing addons (for preferences checklist)
   const [pricingAddons, setPricingAddons] = useState<PricingAddon[]>([])
+  // Project type fields
+  const [typeFields, setTypeFields] = useState<ProjectTypeField[]>([])
+  const [typeAnswers, setTypeAnswers] = useState<Record<string, string>>({})
+  const [savingAnswers, setSavingAnswers] = useState(false)
+  const [answersSaved, setAnswersSaved] = useState(false)
 
   // Overview form state
   const [customerId, setCustomerId] = useState('')
@@ -162,6 +169,17 @@ export default function ProjectDetailPage() {
       setPricingAddons(addons)
       setPrimaryMaterial(p.primary_material ?? '')
       setRequestedAddons((p.requested_addons as string[] | undefined) ?? [])
+      // Load project type fields + answers
+      if (p.project_type) {
+        const [fields, answers] = await Promise.all([
+          getFieldsByProjectType(p.project_type).catch(() => [] as ProjectTypeField[]),
+          getAnswersByProjectId(p.id).catch(() => [] as ProjectTypeAnswer[]),
+        ])
+        setTypeFields(fields)
+        const answerMap: Record<string, string> = {}
+        for (const a of answers) answerMap[a.field_id] = a.answer ?? ''
+        setTypeAnswers(answerMap)
+      }
     }
     load().catch(err => setError(String(err))).finally(() => setLoading(false))
   }, [id])
@@ -494,12 +512,72 @@ export default function ProjectDetailPage() {
               className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-5 py-2 rounded-lg transition-colors text-sm">
               {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
             </button>
-            {/* Fix 3: Delete project link */}
             <button onClick={() => setShowDeleteConfirm(true)}
               className="text-xs text-red-500 hover:text-red-400 transition-colors">
               Delete Project
             </button>
           </div>
+
+          {/* Project Details — dynamic type-specific fields */}
+          {typeFields.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sm text-white">Project Details</h3>
+                <span className="text-[10px] text-gray-500 capitalize">{project.project_type?.replace(/_/g, ' ')}</span>
+              </div>
+              <div className="space-y-3">
+                {typeFields.map(field => (
+                  <div key={field.id} className="flex items-center gap-3">
+                    <label className="flex-1 text-sm text-gray-300 flex items-center gap-1.5">
+                      {field.field_label}
+                      {field.affects_price && <span className="text-[10px] text-amber-500" title="Affects price">$</span>}
+                    </label>
+                    <div className="w-40 shrink-0">
+                      {field.field_type === 'yes_no' && (
+                        <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                          {['Yes', 'No'].map(opt => (
+                            <button key={opt} type="button"
+                              onClick={() => setTypeAnswers(prev => ({ ...prev, [field.id]: opt }))}
+                              className={`flex-1 px-2 py-1 text-xs font-medium transition-colors ${typeAnswers[field.id] === opt ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                            >{opt}</button>
+                          ))}
+                        </div>
+                      )}
+                      {field.field_type === 'number' && (
+                        <input type="number" value={typeAnswers[field.id] ?? ''} onChange={e => setTypeAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                      )}
+                      {field.field_type === 'dropdown' && (
+                        <select value={typeAnswers[field.id] ?? ''} onChange={e => setTypeAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none">
+                          <option value="">—</option>
+                          {(field.field_options as string[]).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      )}
+                      {field.field_type === 'text' && (
+                        <input value={typeAnswers[field.id] ?? ''} onChange={e => setTypeAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={async () => {
+                  setSavingAnswers(true)
+                  try {
+                    await saveAllAnswers(id, Object.entries(typeAnswers).filter(([, v]) => v).map(([fieldId, answer]) => ({ fieldId, answer })))
+                    setAnswersSaved(true)
+                    setTimeout(() => setAnswersSaved(false), 2000)
+                  } finally { setSavingAnswers(false) }
+                }}
+                disabled={savingAnswers}
+                className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-medium text-sm px-4 py-2 rounded-lg"
+              >
+                {savingAnswers ? 'Saving...' : answersSaved ? '✓ Saved' : 'Save Project Details'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
