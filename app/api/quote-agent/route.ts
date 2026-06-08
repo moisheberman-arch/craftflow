@@ -230,6 +230,11 @@ BEHAVIOR RULES:
 - The quote is not final until the sales person says "mark this as final." Until then it is initial or revised.
 - When the user says "mark this as final," confirm and end with: STATUS: FINAL`
 
+  console.log('[QA] isInitialLoad:', isInitialLoad)
+  console.log('[QA] projectDetails:', JSON.stringify(projectDetails))
+  console.log('[QA] openingInstruction len:', openingInstruction.length)
+  console.log('[QA] systemPrompt first 600:', systemPrompt.slice(0, 600))
+
   // ── Build messages for OpenAI ────────────────────────────────────────────
   const chatMessages: { role: string; content: string }[] = [
     { role: 'system', content: systemPrompt },
@@ -263,11 +268,13 @@ BEHAVIOR RULES:
 
   if (!response.ok) {
     const err = await response.text()
+    console.log('[QA] OpenAI error:', err)
     return NextResponse.json({ error: `OpenAI error: ${err}` }, { status: 500 })
   }
 
   const data = await response.json()
   const aiText: string = data.choices?.[0]?.message?.content ?? ''
+  console.log('[QA] aiText first 300:', aiText.slice(0, 300))
 
   const scopeMatch = aiText.match(/SCOPE OF WORK[:\s]*\n?([\s\S]*?)(?=\nCOST BREAKDOWN|\nCOMPLEXITY|\nFINAL PRICE|$)/i)
   const complexityMatch = aiText.match(/COMPLEXITY ASSESSMENT[:\s]*\n?([\s\S]*?)(?=\nFINAL PRICE|$)/i)

@@ -200,7 +200,7 @@ export default function QuoteAgentPage() {
       } catch (err) {
         setMessages([{
           role: 'assistant',
-          content: "I'm ready to help build a quote for this project. Tell me about the job — dimensions, materials, and any special features — and I'll work through the pricing.",
+          content: `⚠️ DEBUG ERROR: ${err instanceof Error ? err.message : String(err)}`,
           timestamp: new Date().toISOString(),
         }])
       } finally {
