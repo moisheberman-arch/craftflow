@@ -197,12 +197,8 @@ export default function QuoteAgentPage() {
           content: data.message,
           timestamp: new Date().toISOString(),
         }])
-      } catch (err) {
-        setMessages([{
-          role: 'assistant',
-          content: `⚠️ DEBUG ERROR: ${err instanceof Error ? err.message : String(err)}`,
-          timestamp: new Date().toISOString(),
-        }])
+      } catch {
+        // silently ignore — page still renders, user can retry
       } finally {
         setSending(false)
       }
