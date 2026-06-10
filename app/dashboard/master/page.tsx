@@ -38,7 +38,7 @@ function deliveryRowColor(daysLeft: number | null, isOverdue: boolean) {
 const STATUS_LABELS: Record<string, string> = {
   lead: 'Lead', tentative_quote_sent: 'Quote Sent', design_meeting_scheduled: 'Design Mtg',
   post_design_meeting: 'Post Meeting', rendering_in_progress: 'Rendering',
-  final_quote_issued: 'Final Quote', deposit_received: 'Deposit', in_production: 'In Production', completed: 'Completed',
+  final_quote_issued: 'Final Quote', deposit_received: 'Deposit', in_production: 'In Production', ready_for_delivery: 'Ready for Delivery', completed: 'Completed',
 }
 
 export default function MasterDocPage() {
@@ -100,8 +100,8 @@ export default function MasterDocPage() {
   const normalTouchups = touchups.filter(t => t.priority === 'normal')
   const inQueue = projects.filter(p => p.currentStep?.step_name === 'Ready for Production — In Queue')
   const overdue = projects.filter(p => p.isOverdue)
-  const actionTasks = projects.filter(p => p.currentStep?.step_type === 'action' && (p.status === 'in_production' || p.status === 'deposit_received'))
-  const waitingTasks = projects.filter(p => p.currentStep?.step_type === 'waiting' && (p.status === 'in_production' || p.status === 'deposit_received'))
+  const actionTasks = projects.filter(p => p.currentStep?.step_type === 'action' && (p.status === 'in_production' || p.status === 'deposit_received' || p.status === 'ready_for_delivery'))
+  const waitingTasks = projects.filter(p => p.currentStep?.step_type === 'waiting' && (p.status === 'in_production' || p.status === 'deposit_received' || p.status === 'ready_for_delivery'))
 
   // Group questions by project
   const qByProject = new Map<string, OpenQuestion[]>()

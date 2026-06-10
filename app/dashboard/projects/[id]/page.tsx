@@ -27,7 +27,7 @@ const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'b
 const STATUSES: ProjectStatus[] = [
   'lead', 'tentative_quote_sent', 'design_meeting_scheduled',
   'post_design_meeting', 'rendering_in_progress', 'final_quote_issued',
-  'deposit_received', 'in_production', 'completed',
+  'deposit_received', 'in_production', 'ready_for_delivery', 'completed',
 ]
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
@@ -39,6 +39,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
+  ready_for_delivery: 'Ready for Delivery',
   completed: 'Completed',
 }
 
@@ -154,6 +155,20 @@ export default function ProjectDetailPage() {
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
+  // Design meeting request state
+  const [meetingRequested, setMeetingRequested] = useState(false)
+  const [requestingMeeting, setRequestingMeeting] = useState(false)
+
+  async function handleRequestDesignMeeting() {
+    setRequestingMeeting(true)
+    try {
+      await updateProject(id, { design_meeting_requested: true })
+      setMeetingRequested(true)
+    } finally {
+      setRequestingMeeting(false)
+    }
+  }
+
   useEffect(() => {
     // Bug 5: each fetch is independent — one failing won't kill the others
     async function load() {
@@ -165,6 +180,7 @@ export default function ProjectDetailPage() {
       setStatus(p.status ?? '')
       setAddress(p.address ?? '')
       setNotes(p.notes ?? '')
+      setMeetingRequested(!!p.design_meeting_requested)
 
       // Load secondary data independently — failures are non-fatal
       const [c, m, s, sl, q, dn, addons, f, ct] = await Promise.all([
@@ -519,6 +535,26 @@ export default function ProjectDetailPage() {
             <div className="bg-yellow-950 border border-yellow-800 rounded-lg px-4 py-3 text-sm text-yellow-300">
               <strong className="font-semibold">Action needed:</strong>{' '}
               {stageAlerts.join(' · ')}
+            </div>
+          )}
+
+          {/* Request Shop Design Meeting */}
+          {(project.status === 'design_meeting_scheduled' || project.status === 'post_design_meeting') && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+              {meetingRequested ? (
+                <p className="text-sm text-emerald-400">✓ Shop has been notified to schedule a design meeting.</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-300">Need the shop to meet on this design?</p>
+                  <button
+                    onClick={handleRequestDesignMeeting}
+                    disabled={requestingMeeting}
+                    className="text-sm bg-blue-800 hover:bg-blue-700 disabled:opacity-50 text-blue-200 font-semibold px-4 py-2 rounded-lg shrink-0"
+                  >
+                    {requestingMeeting ? 'Requesting...' : 'Request Shop Design Meeting'}
+                  </button>
+                </>
+              )}
             </div>
           )}
 

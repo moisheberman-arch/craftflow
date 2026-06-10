@@ -238,6 +238,22 @@ export async function setCurrentStep(projectId: string, stepId: string): Promise
   if (step) await seedSuggestedSubtasksIfEmpty(stepId, projectId, step.step_name).catch(console.error)
 }
 
+// Keep project status in sync with where the current step sits in the pipeline
+async function syncProjectStatusForStep(projectId: string, stepName: string): Promise<void> {
+  let newStatus: string | null = null
+  if (stepName.includes('Production Started') || stepName.includes('In Production')) {
+    newStatus = 'in_production'
+  } else if (stepName.includes('Ready for Delivery') || stepName.includes('Delivery / Installation Scheduled')) {
+    newStatus = 'ready_for_delivery'
+  } else if (stepName === 'Delivered and Installed') {
+    newStatus = 'completed'
+  }
+  if (!newStatus) return
+  await supabase.from('projects')
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq('id', projectId)
+}
+
 export async function autoAdvanceCurrentStep(
   projectId: string,
   completedStepId: string
@@ -265,6 +281,7 @@ export async function autoAdvanceCurrentStep(
     await supabase.from('production_steps')
       .update({ is_current: true }).eq('id', nextStep.id)
     await seedSuggestedSubtasksIfEmpty(nextStep.id, projectId, nextStep.step_name).catch(console.error)
+    await syncProjectStatusForStep(projectId, nextStep.step_name).catch(console.error)
     return { nextStep: nextStep as ProductionStep, projectCompleted: false }
   }
 
@@ -290,6 +307,29 @@ export async function addStepToLibrary(
   const { data, error } = await supabase.from('step_library').insert(input).select().single()
   if (error) throw error
   return data as StepLibraryItem
+}
+
+export async function updateStepLibraryItem(
+  id: string,
+  input: Partial<Omit<StepLibraryItem, 'id' | 'created_at'>>
+): Promise<StepLibraryItem> {
+  const { data, error } = await supabase
+    .from('step_library').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data as StepLibraryItem
+}
+
+export async function deleteStepLibraryItem(id: string): Promise<void> {
+  const { error } = await supabase.from('step_library').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function reorderStepLibrary(orderedIds: string[]): Promise<void> {
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase.from('step_library').update({ sequence_order: index + 1 }).eq('id', id)
+    )
+  )
 }
 
 // ── Step Subtasks ──────────────────────────────────────────────────────────
@@ -543,7 +583,7 @@ export async function getAllUnpurchasedShoppingItems(): Promise<ShoppingListItem
 }
 
 export async function addShoppingListItem(
-  projectId: string,
+  projectId: string | null,
   item: string,
   notes?: string
 ): Promise<ShoppingListItem> {
@@ -868,12 +908,36 @@ export async function deleteCustomProjectType(id: string): Promise<void> {
   if (error) throw error
 }
 
+// ── Design Meeting Requests ────────────────────────────────────────────────
+
+// Projects flagged design_meeting_requested = true that have NO upcoming
+// appointment-type calendar event linked to them.
+export async function getPendingDesignMeetingRequests(): Promise<Project[]> {
+  const { data: requested, error } = await supabase
+    .from('projects')
+    .select('*, customer:customers(*)')
+    .eq('design_meeting_requested', true)
+  if (error) throw error
+  const list = (requested ?? []) as Project[]
+  if (list.length === 0) return []
+
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: upcoming } = await supabase
+    .from('calendar_events')
+    .select('project_id')
+    .eq('event_type', 'appointment')
+    .gte('event_date', today)
+    .in('project_id', list.map(p => p.id))
+  const scheduledIds = new Set((upcoming ?? []).map((e: { project_id: string | null }) => e.project_id))
+  return list.filter(p => !scheduledIds.has(p.id))
+}
+
 export async function getShopTaskProjects(): Promise<ShopTaskProject[]> {
   // Get all active shop projects with their current step
   const { data: projects, error } = await supabase
     .from('projects')
     .select('*, customer:customers(*)')
-    .in('status', ['deposit_received', 'in_production'])
+    .in('status', ['deposit_received', 'in_production', 'ready_for_delivery'])
   if (error) throw error
 
   const results: ShopTaskProject[] = []

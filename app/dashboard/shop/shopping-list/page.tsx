@@ -22,14 +22,14 @@ export default function ShoppingListPage() {
     // Group by project
     const map = new Map<string, GroupedItems>()
     for (const item of items) {
-      const pid = item.project_id
+      const pid = item.project_id ?? 'general'
       if (!map.has(pid)) {
         const p = item.project
         const customerName = (p as any)?.customer?.name ?? 'Unknown Customer'
         const projectType = p?.project_type?.replace(/_/g, ' ') ?? 'Project'
         map.set(pid, {
           projectId: pid,
-          label: `${customerName} — ${projectType}`,
+          label: item.project_id ? `${customerName} — ${projectType}` : 'General',
           items: [],
         })
       }

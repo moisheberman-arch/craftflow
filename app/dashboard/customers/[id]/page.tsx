@@ -15,6 +15,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
+  ready_for_delivery: 'Ready for Delivery',
   completed: 'Completed',
 }
 

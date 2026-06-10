@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   getProjects, createProject, getCustomers, createCustomer,
@@ -22,6 +21,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
+  ready_for_delivery: 'Ready for Delivery',
   completed: 'Completed',
 }
 
@@ -36,6 +36,21 @@ const SALES_SECTIONS: ProjectStatus[] = [
   'deposit_received',
 ]
 
+// Full pipeline in canonical order — used for the inline status dropdown so the
+// current status is always present and pre-selected even after auto-updates.
+const ALL_STATUSES: ProjectStatus[] = [
+  'lead',
+  'tentative_quote_sent',
+  'design_meeting_scheduled',
+  'post_design_meeting',
+  'rendering_in_progress',
+  'final_quote_issued',
+  'deposit_received',
+  'in_production',
+  'ready_for_delivery',
+  'completed',
+]
+
 const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'buffet', 'other']
 
 // Badge colours per status (used in dropdown styling)
@@ -48,6 +63,7 @@ const STATUS_COLORS: Record<ProjectStatus, string> = {
   final_quote_issued:       'bg-yellow-900 text-yellow-200',
   deposit_received:         'bg-green-900 text-green-200',
   in_production:            'bg-orange-900 text-orange-200',
+  ready_for_delivery:       'bg-teal-900 text-teal-200',
   completed:                'bg-emerald-900 text-emerald-200',
 }
 
@@ -590,7 +606,7 @@ function StatusBadgeSelect({
         style={{ backgroundImage: 'none' }}
         title="Change status"
       >
-        {SALES_SECTIONS.map(s => (
+        {ALL_STATUSES.map(s => (
           <option key={s} value={s}>{STATUS_LABELS[s]}</option>
         ))}
       </select>
@@ -699,7 +715,11 @@ export default function SalesDashboard() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {group.map(project => (
-                    <div key={project.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2.5 hover:border-gray-700 transition-colors">
+                    <div
+                      key={project.id}
+                      onClick={() => router.push(`/dashboard/projects/${project.id}?view=sales`)}
+                      className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2.5 hover:border-gray-700 transition-colors cursor-pointer"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-semibold text-white text-sm truncate">
@@ -719,12 +739,6 @@ export default function SalesDashboard() {
                         <span className="text-xs text-gray-600">
                           {new Date(project.updated_at).toLocaleDateString()}
                         </span>
-                        <Link
-                          href={`/dashboard/projects/${project.id}?view=sales`}
-                          className="text-xs text-amber-400 hover:text-amber-300 font-medium"
-                        >
-                          View →
-                        </Link>
                       </div>
                     </div>
                   ))}

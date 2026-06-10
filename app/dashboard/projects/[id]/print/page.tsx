@@ -74,7 +74,7 @@ export default function PrintJobSheetPage() {
     lead: 'Lead', tentative_quote_sent: 'Tentative Quote Sent',
     design_meeting_scheduled: 'Design Meeting Scheduled', post_design_meeting: 'Post Design Meeting',
     rendering_in_progress: 'Rendering In Progress', final_quote_issued: 'Final Quote Issued',
-    deposit_received: 'Deposit Received', in_production: 'In Production', completed: 'Completed',
+    deposit_received: 'Deposit Received', in_production: 'In Production', ready_for_delivery: 'Ready for Delivery', completed: 'Completed',
   }
 
   return (

@@ -81,6 +81,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="bg-gray-900 border border-gray-800 rounded-lg shadow-xl overflow-hidden min-w-[160px]">
                 <Link href="/dashboard/settings/pricing" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Pricing Config</Link>
                 <Link href="/dashboard/settings/project-types" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Project Types</Link>
+                <Link href="/dashboard/settings/steps" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Step Templates</Link>
+                <Link href="/dashboard/settings/manage-projects" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Manage Projects</Link>
               </div>
             </div>
           </div>

@@ -25,7 +25,7 @@ const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'b
 const STATUSES: ProjectStatus[] = [
   'lead', 'tentative_quote_sent', 'design_meeting_scheduled',
   'post_design_meeting', 'rendering_in_progress', 'final_quote_issued',
-  'deposit_received', 'in_production', 'completed',
+  'deposit_received', 'in_production', 'ready_for_delivery', 'completed',
 ]
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   lead: 'Lead',
@@ -36,6 +36,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   final_quote_issued: 'Final Quote Issued',
   deposit_received: 'Deposit Received',
   in_production: 'In Production',
+  ready_for_delivery: 'Ready for Delivery',
   completed: 'Completed',
 }
 
@@ -599,6 +600,7 @@ export default function ShopView({ project: initialProject }: { project: Project
           </h1>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
             project.status === 'in_production' ? 'bg-orange-900 text-orange-200' :
+            project.status === 'ready_for_delivery' ? 'bg-teal-900 text-teal-200' :
             project.status === 'deposit_received' ? 'bg-green-900 text-green-200' :
             'bg-gray-700 text-gray-300'
           }`}>{project.status ? STATUS_LABELS[project.status] : '—'}</span>
@@ -624,6 +626,7 @@ export default function ShopView({ project: initialProject }: { project: Project
                   <p className="font-bold text-white text-base leading-tight">{customer?.name ?? 'Unknown'}</p>
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${
                     project.status === 'in_production' ? 'bg-orange-900 text-orange-200' :
+                    project.status === 'ready_for_delivery' ? 'bg-teal-900 text-teal-200' :
                     project.status === 'deposit_received' ? 'bg-green-900 text-green-200' :
                     'bg-gray-700 text-gray-300'
                   }`}>{project.status ? STATUS_LABELS[project.status as ProjectStatus] : '—'}</span>

@@ -17,12 +17,16 @@ import {
   updateShoppingListItem,
   seedDefaultStepsIfEmpty,
   getFilesByProjectId,
-  addSubtask,
   updateSubtask,
+  getOpenTouchups,
+  getPendingDesignMeetingRequests,
+  addShoppingListItem,
+  addDesignMeetingNote,
 } from '@/lib/api/supabase-client'
 import type {
   Project, ProductionStep, MaterialItem, StepSubtask,
   OpenQuestion, CalendarEvent, CalendarEventType, ProjectStatus, ShoppingListItem,
+  Touchup,
 } from '@/lib/core/types'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -52,8 +56,24 @@ function daysSince(dateStr: string): number {
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: 'deposit_received', label: 'Deposit Received' },
   { value: 'in_production', label: 'In Production' },
+  { value: 'ready_for_delivery', label: 'Ready for Delivery' },
   { value: 'completed', label: 'Completed' },
 ]
+
+function getMissingInfoAlerts(p: EnrichedProject): string[] {
+  const stepOrder = p.currentStep?.sequence_order ?? 0
+  const stepName = p.currentStep?.step_name ?? ''
+  const alerts: string[] = []
+  if (['Ready for Paint / Stain', 'In Paint Shop', 'Quality Check'].includes(stepName) && !p.color_finish)
+    alerts.push('Paint Color')
+  if (stepOrder > 3 && (!p.width_inches || !p.height_inches || !p.depth_inches))
+    alerts.push('Dimensions')
+  if (stepOrder > 4 && !p.primary_material)
+    alerts.push('Wood Species')
+  if (['Waiting: Customer Approval on Sketch', 'Waiting: Customer Approval on Rendering'].includes(stepName) && !p.hasFiles)
+    alerts.push('Sketch/Rendering File')
+  return alerts
+}
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -187,6 +207,78 @@ function AddEventModal({ date, onSave, onClose }: {
   )
 }
 
+// ── Schedule Design Meeting Modal ──────────────────────────────────────────
+
+function ScheduleMeetingModal({ project, onScheduled, onClose }: {
+  project: Project
+  onScheduled: (projectId: string, event: CalendarEvent) => void
+  onClose: () => void
+}) {
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const label = `${project.customer?.name ?? 'Unknown'} — ${project.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!date) return
+    setSaving(true)
+    try {
+      const ev = await addCalendarEvent({
+        event_date: date,
+        title: `Design Meeting — ${project.customer?.name ?? 'Unknown'}${time ? ` @ ${time}` : ''}`,
+        notes: notes || null,
+        project_id: project.id,
+        event_type: 'appointment',
+      })
+      await updateProject(project.id, { design_meeting_requested: false })
+      await addDesignMeetingNote(
+        project.id,
+        `Design meeting scheduled for ${date}${time ? ` at ${time}` : ''}.${notes ? ` Notes: ${notes}` : ''}`
+      ).catch(console.error)
+      onScheduled(project.id, ev)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-white text-sm">Schedule Design Meeting</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <p className="text-xs text-gray-400">{label}</p>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Date *</label>
+              <input type="date" required value={date} onChange={e => setDate(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Time</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+            </div>
+          </div>
+          <textarea placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none resize-none" />
+          <div className="flex gap-3">
+            <button type="submit" disabled={saving || !date}
+              className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+              {saving ? 'Scheduling...' : 'Schedule Meeting'}
+            </button>
+            <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Shopping List Panel ────────────────────────────────────────────────────
 
 function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
@@ -194,6 +286,25 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
   const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState(true)
   const [markingId, setMarkingId] = useState<string | null>(null)
+
+  // Quick-add — always visible, even when collapsed
+  const [quickItem, setQuickItem] = useState('')
+  const [quickProjectId, setQuickProjectId] = useState('')
+  const [quickAdding, setQuickAdding] = useState(false)
+
+  async function handleQuickAdd() {
+    if (!quickItem.trim() || quickAdding) return
+    setQuickAdding(true)
+    try {
+      const created = await addShoppingListItem(quickProjectId || null, quickItem.trim())
+      setItems(prev => [...prev, created])
+      setQuickItem('')
+      setQuickProjectId('')
+      setCollapsed(false)
+    } finally {
+      setQuickAdding(false)
+    }
+  }
 
   useEffect(() => {
     getAllUnpurchasedShoppingItems()
@@ -216,11 +327,13 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
   // Group items by project
   const byProject = new Map<string, ShoppingListItem[]>()
   for (const item of items) {
-    if (!byProject.has(item.project_id)) byProject.set(item.project_id, [])
-    byProject.get(item.project_id)!.push(item)
+    const key = item.project_id ?? 'general'
+    if (!byProject.has(key)) byProject.set(key, [])
+    byProject.get(key)!.push(item)
   }
 
   function getProjectLabel(item: ShoppingListItem): string {
+    if (!item.project_id) return 'General'
     const p = item.project as (Project & { customer?: { name: string } }) | undefined
     if (!p) {
       const ep = projects.find(proj => proj.id === item.project_id)
@@ -232,6 +345,38 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+      {/* Quick-add — always visible above the collapse toggle */}
+      <div className="mb-2 space-y-1.5">
+        <div className="flex gap-1.5">
+          <input
+            placeholder="Add item to shopping list..."
+            value={quickItem}
+            onChange={e => setQuickItem(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleQuickAdd() }}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+          <button
+            onClick={handleQuickAdd}
+            disabled={quickAdding || !quickItem.trim()}
+            className="text-xs bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 font-semibold px-3 py-1.5 rounded-lg shrink-0"
+          >
+            {quickAdding ? '...' : 'Add'}
+          </button>
+        </div>
+        <select
+          value={quickProjectId}
+          onChange={e => setQuickProjectId(e.target.value)}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-[11px] text-gray-300 focus:outline-none"
+        >
+          <option value="">Link to project (optional)</option>
+          {projects.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.customer?.name ?? 'Unknown'} — {p.project_type?.replace(/_/g, ' ') ?? 'Project'}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <button
         onClick={() => setCollapsed(v => !v)}
         className="w-full flex items-center justify-between mb-1"
@@ -416,27 +561,17 @@ function ProjectCard({
 
       {/* Missing Info Alerts */}
       {(() => {
-        const stepOrder = p.currentStep?.sequence_order ?? 0
-        const stepName = p.currentStep?.step_name ?? ''
-        const alerts: { label: string }[] = []
-        if (['Ready for Paint / Stain', 'In Paint Shop', 'Quality Check'].includes(stepName) && !p.color_finish)
-          alerts.push({ label: 'Paint Color' })
-        if (stepOrder > 3 && (!p.width_inches || !p.height_inches || !p.depth_inches))
-          alerts.push({ label: 'Dimensions' })
-        if (stepOrder > 4 && !p.primary_material)
-          alerts.push({ label: 'Wood Species' })
-        if (['Waiting: Customer Approval on Sketch', 'Waiting: Customer Approval on Rendering'].includes(stepName) && !p.hasFiles)
-          alerts.push({ label: 'Sketch/Rendering File' })
+        const alerts = getMissingInfoAlerts(p)
         if (alerts.length === 0) return null
         return (
           <div className="flex flex-wrap gap-1 mb-2" onClick={e => e.stopPropagation()}>
-            {alerts.map(a => (
+            {alerts.map(label => (
               <button
-                key={a.label}
+                key={label}
                 onClick={() => onNavigate(p.id)}
                 className="text-[10px] font-semibold bg-red-950 border border-red-700 text-red-300 px-1.5 py-0.5 rounded-full hover:bg-red-900 transition-colors"
               >
-                ⚠ Missing: {a.label}
+                ⚠ Missing: {label}
               </button>
             ))}
           </div>
@@ -627,9 +762,12 @@ export default function ShopDashboard() {
   // Today's tasks
   const [taskProjects, setTaskProjects] = useState<ShopTaskProject[]>([])
   const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null)
-  const [addingSubtaskStepId, setAddingSubtaskStepId] = useState<string | null>(null)
-  const [newSubtaskText, setNewSubtaskText] = useState('')
-  const [savingSubtask, setSavingSubtask] = useState(false)
+  const [openTouchups, setOpenTouchups] = useState<Touchup[]>([])
+
+  // Design meeting requests
+  const [meetingRequests, setMeetingRequests] = useState<Project[]>([])
+  const [meetingsCollapsed, setMeetingsCollapsed] = useState(true)
+  const [schedulingProject, setSchedulingProject] = useState<Project | null>(null)
 
   // Drag state (shared, one card dragged at a time)
   const dragId = useRef<string | null>(null)
@@ -638,16 +776,20 @@ export default function ShopDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [allProjects, allQuestions, tasks] = await Promise.all([
+      const [allProjects, allQuestions, tasks, touchups, requests] = await Promise.all([
         getProjects(),
         getUnresolvedQuestionsAllProjects().catch(() => [] as OpenQuestion[]),
         getShopTaskProjects().catch(() => [] as ShopTaskProject[]),
+        getOpenTouchups().catch(() => [] as Touchup[]),
+        getPendingDesignMeetingRequests().catch(() => [] as Project[]),
       ])
       setPendingQuestions(allQuestions)
       setTaskProjects(tasks)
+      setOpenTouchups(touchups)
+      setMeetingRequests(requests)
 
       const active = allProjects.filter(
-        p => p.status === 'in_production' || p.status === 'deposit_received'
+        p => p.status === 'in_production' || p.status === 'deposit_received' || p.status === 'ready_for_delivery'
       )
 
       const enriched = await Promise.all(active.map(async p => {
@@ -754,17 +896,15 @@ export default function ShopDashboard() {
 
   if (loading) return <div className="text-center py-8 text-gray-500">Loading...</div>
 
-  const inProduction = projects.filter(p => !p.inQueue)
-  const inQueue = projects.filter(p => p.inQueue)
+  const readyForDelivery = projects.filter(p => p.status === 'ready_for_delivery')
+  const inProduction = projects.filter(p => !p.inQueue && p.status !== 'ready_for_delivery')
+  const inQueue = projects.filter(p => p.inQueue && p.status !== 'ready_for_delivery')
 
   const qByProject = new Map<string, OpenQuestion[]>()
   for (const q of pendingQuestions) {
     if (!qByProject.has(q.project_id)) qByProject.set(q.project_id, [])
     qByProject.get(q.project_id)!.push(q)
   }
-
-  const actionTasks = taskProjects.filter(t => t.currentStep.step_type === 'action')
-  const waitingTasks = taskProjects.filter(t => t.currentStep.step_type === 'waiting')
 
   return (
     <div className="flex gap-5 items-start">
@@ -786,6 +926,41 @@ export default function ShopDashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Design Meetings Needed Banner */}
+        {meetingRequests.length > 0 && (
+          <div className="bg-blue-950/40 border border-blue-800 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-blue-800/60">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-400 font-semibold text-sm">📐 Design Meetings Needed</span>
+                <span className="bg-blue-800 text-blue-200 text-xs font-bold px-2 py-0.5 rounded-full">{meetingRequests.length}</span>
+              </div>
+              <button onClick={() => setMeetingsCollapsed(v => !v)} className="text-blue-400 hover:text-blue-300 text-xs">
+                {meetingsCollapsed ? 'Show' : 'Hide'}
+              </button>
+            </div>
+            {!meetingsCollapsed && (
+              <div className="divide-y divide-blue-900/40">
+                {meetingRequests.map(p => (
+                  <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-blue-200 truncate">
+                        {p.customer?.name ?? 'Unknown'} — <span className="capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'Project'}</span>
+                      </p>
+                      <p className="text-[10px] text-blue-400/70">Requested {new Date(p.updated_at).toLocaleDateString()}</p>
+                    </div>
+                    <button
+                      onClick={() => setSchedulingProject(p)}
+                      className="text-xs bg-blue-800 hover:bg-blue-700 text-blue-100 font-semibold px-3 py-1.5 rounded-lg shrink-0"
+                    >
+                      Schedule Meeting
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Pending Questions Banner */}
         {pendingQuestions.length > 0 && (
@@ -835,6 +1010,31 @@ export default function ShopDashboard() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {inProduction.map(p => (
+                <ProjectCard
+                  key={p.id}
+                  p={p}
+                  onNavigate={handleNavigate}
+                  onProjectUpdated={handleProjectUpdated}
+                  isDragOver={dragOverId === p.id}
+                  onDragStart={id => handleDragStart('production', id)}
+                  onDragOver={id => handleDragOver('production', id)}
+                  onDrop={toId => handleDrop('production', toId)}
+                  onDragEnd={handleDragEnd}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Ready for Delivery */}
+        {readyForDelivery.length > 0 && (
+          <div>
+            <h2 className="font-bold text-white mb-3 flex items-center gap-2">
+              Ready for Delivery
+              <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{readyForDelivery.length}</span>
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {readyForDelivery.map(p => (
                 <ProjectCard
                   key={p.id}
                   p={p}
@@ -917,9 +1117,20 @@ export default function ShopDashboard() {
           )}
         </div>
 
-        {/* Today's Tasks section (~30%) */}
+        {/* Today's Tasks section — actionable items only */}
         {(() => {
-          const totalItems = taskProjects.reduce((sum, t) => sum + (t.subtasks.length > 0 ? t.subtasks.length : 1), 0)
+          const missingInfo = projects
+            .map(p => ({ p, alerts: getMissingInfoAlerts(p) }))
+            .filter(x => x.alerts.length > 0)
+          const urgentTouchups = openTouchups.filter(t => t.priority === 'urgent')
+          const openSubtaskItems = taskProjects.flatMap(t =>
+            t.subtasks.map(st => ({ t, st }))
+          )
+          const totalItems =
+            openSubtaskItems.length +
+            pendingQuestions.length +
+            missingInfo.reduce((s, x) => s + x.alerts.length, 0) +
+            urgentTouchups.length
 
           async function handleCompleteSubtask(subtaskId: string, stepId: string) {
             setCompletingSubtaskId(subtaskId)
@@ -933,85 +1144,8 @@ export default function ShopDashboard() {
             } finally { setCompletingSubtaskId(null) }
           }
 
-          async function handleAddSubtask(stepId: string, projectId: string) {
-            if (!newSubtaskText.trim()) return
-            setSavingSubtask(true)
-            try {
-              const st = await addSubtask(stepId, projectId, newSubtaskText.trim())
-              setTaskProjects(prev => prev.map(t =>
-                t.currentStep.id === stepId
-                  ? { ...t, subtasks: [...t.subtasks, st], openSubtasks: t.openSubtasks + 1 }
-                  : t
-              ))
-              setNewSubtaskText('')
-              setAddingSubtaskStepId(null)
-            } finally { setSavingSubtask(false) }
-          }
-
-          function renderTaskItems(tasks: ShopTaskProject[], isAction: boolean) {
-            return tasks.flatMap(t => {
-              const projectLabel = `${t.project.customer?.name ?? 'Unknown'}${t.project.project_type ? ' — ' + t.project.project_type.replace(/_/g, ' ') : ''}`
-              if (t.subtasks.length > 0) {
-                return t.subtasks.map(st => (
-                  <div key={st.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 group">
-                    <input
-                      type="checkbox"
-                      checked={false}
-                      disabled={completingSubtaskId === st.id}
-                      onChange={() => handleCompleteSubtask(st.id, t.currentStep.id)}
-                      className="mt-0.5 w-3 h-3 rounded border-gray-600 bg-gray-800 accent-emerald-500 cursor-pointer shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-xs font-medium text-white truncate ${completingSubtaskId === st.id ? 'opacity-50' : ''}`}>{st.description}</p>
-                      <p className="text-[10px] text-gray-500 truncate">{projectLabel}</p>
-                    </div>
-                    <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
-                      className="text-gray-600 hover:text-amber-400 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</Link>
-                  </div>
-                ))
-              }
-              // No subtasks — show step name with inline add prompt
-              const isAdding = addingSubtaskStepId === t.currentStep.id
-              return [(
-                <div key={t.project.id} className="px-2 py-1.5 rounded-lg hover:bg-gray-800">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-semibold px-1 py-0.5 rounded uppercase shrink-0 ${isAction ? 'bg-emerald-900 text-emerald-200' : 'bg-orange-900 text-orange-200'}`}>
-                      {isAction ? 'act' : 'wait'}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-white truncate">{projectLabel}</p>
-                      <p className="text-[10px] text-gray-500 truncate">{t.currentStep.step_name}</p>
-                    </div>
-                    <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
-                      className="text-gray-600 hover:text-amber-400 text-xs shrink-0">→</Link>
-                  </div>
-                  {!isAdding ? (
-                    <button
-                      onClick={() => { setAddingSubtaskStepId(t.currentStep.id); setNewSubtaskText('') }}
-                      className="mt-1 text-[10px] text-orange-400 hover:text-orange-300 pl-5"
-                    >⚠ Add action item</button>
-                  ) : (
-                    <div className="mt-1 flex gap-1 pl-5">
-                      <input
-                        autoFocus
-                        placeholder="Action item..."
-                        value={newSubtaskText}
-                        onChange={e => setNewSubtaskText(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(t.currentStep.id, t.project.id); if (e.key === 'Escape') setAddingSubtaskStepId(null) }}
-                        className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
-                      />
-                      <button onClick={() => handleAddSubtask(t.currentStep.id, t.project.id)}
-                        disabled={savingSubtask || !newSubtaskText.trim()}
-                        className="text-[10px] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-2 rounded">
-                        {savingSubtask ? '...' : 'Add'}
-                      </button>
-                      <button onClick={() => setAddingSubtaskStepId(null)}
-                        className="text-[10px] text-gray-500 hover:text-white">✕</button>
-                    </div>
-                  )}
-                </div>
-              )]
-            })
+          function projectLabelFor(p: Project): string {
+            return `${p.customer?.name ?? 'Unknown'}${p.project_type ? ' — ' + p.project_type.replace(/_/g, ' ') : ''}`
           }
 
           return (
@@ -1024,26 +1158,99 @@ export default function ShopDashboard() {
                 <Link href="/dashboard/shop/tasks" className="text-xs text-amber-400 hover:text-amber-300">See all →</Link>
               </div>
 
-              {taskProjects.length === 0 ? (
-                <p className="text-xs text-gray-600 py-2">No active steps set.</p>
+              {totalItems === 0 ? (
+                <p className="text-xs text-gray-600 py-2">All clear — no open action items.</p>
               ) : (
                 <div className="space-y-3">
-                  {actionTasks.length > 0 && (
+                  {/* Open sub-tasks */}
+                  {openSubtaskItems.length > 0 && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Action Required</span>
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Sub-Tasks</span>
                       </div>
-                      <div className="space-y-0.5">{renderTaskItems(actionTasks, true)}</div>
+                      <div className="space-y-0.5">
+                        {openSubtaskItems.map(({ t, st }) => (
+                          <div key={st.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 group">
+                            <input
+                              type="checkbox"
+                              checked={false}
+                              disabled={completingSubtaskId === st.id}
+                              onChange={() => handleCompleteSubtask(st.id, t.currentStep.id)}
+                              className="mt-0.5 w-3 h-3 rounded border-gray-600 bg-gray-800 accent-emerald-500 cursor-pointer shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-xs font-medium text-white truncate ${completingSubtaskId === st.id ? 'opacity-50' : ''}`}>{st.description}</p>
+                              <p className="text-[10px] text-gray-500 truncate">{projectLabelFor(t.project)}</p>
+                            </div>
+                            <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
+                              className="text-gray-600 hover:text-amber-400 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</Link>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                  {waitingTasks.length > 0 && (
+
+                  {/* Unresolved open questions */}
+                  {pendingQuestions.length > 0 && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Waiting On</span>
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Open Questions</span>
                       </div>
-                      <div className="space-y-0.5">{renderTaskItems(waitingTasks, false)}</div>
+                      <div className="space-y-0.5">
+                        {pendingQuestions.map(q => (
+                          <div key={q.id} className="px-2 py-1.5 rounded-lg hover:bg-gray-800">
+                            <div className="flex items-start gap-2">
+                              <span className={`shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-900 text-blue-200' : 'bg-gray-700 text-gray-300'}`}>{q.directed_at}</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-white">{q.question}</p>
+                                <p className="text-[10px] text-gray-500 truncate">{q.project ? projectLabelFor(q.project) : 'Unknown Project'}</p>
+                              </div>
+                              <Link href={`/dashboard/projects/${q.project_id}?view=shop`}
+                                className="text-gray-600 hover:text-amber-400 text-xs shrink-0">→</Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Missing critical info */}
+                  {missingInfo.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Missing Info</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {missingInfo.flatMap(({ p, alerts }) => alerts.map(label => (
+                          <Link key={`${p.id}-${label}`} href={`/dashboard/projects/${p.id}?view=shop`}
+                            className="block px-2 py-1.5 rounded-lg hover:bg-gray-800 text-xs text-red-300">
+                            ⚠ {p.customer?.name ?? 'Unknown'} — Missing: {label}
+                          </Link>
+                        )))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Urgent touch-ups */}
+                  {urgentTouchups.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Urgent Touch-Ups</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {urgentTouchups.map(t => (
+                          <div key={t.id} className="px-2 py-1.5 rounded-lg hover:bg-gray-800">
+                            <p className="text-xs font-medium text-white truncate">{t.description}</p>
+                            <p className="text-[10px] text-gray-500">
+                              {t.assigned_to ? `→ ${t.assigned_to} · ` : ''}{daysSince(t.created_at)}d old
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1055,6 +1262,19 @@ export default function ShopDashboard() {
         {/* Shopping List section (~20%, collapsed by default) */}
         <ShoppingListPanel projects={projects} />
       </div>
+
+      {/* Schedule Design Meeting Modal */}
+      {schedulingProject && (
+        <ScheduleMeetingModal
+          project={schedulingProject}
+          onScheduled={(projectId, ev) => {
+            setMeetingRequests(prev => prev.filter(p => p.id !== projectId))
+            setEvents(prev => [...prev, ev].sort((a, b) => a.event_date.localeCompare(b.event_date)))
+            setSchedulingProject(null)
+          }}
+          onClose={() => setSchedulingProject(null)}
+        />
+      )}
 
       {/* Add Event Modal */}
       {addingEventDate && (

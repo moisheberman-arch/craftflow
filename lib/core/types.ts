@@ -24,6 +24,7 @@ export type ProjectStatus =
   | 'final_quote_issued'
   | 'deposit_received'
   | 'in_production'
+  | 'ready_for_delivery'
   | 'completed'
 
 export interface RequiredFieldsCompleted {
@@ -55,6 +56,7 @@ export interface Project {
   expected_delivery_start?: string | null
   expected_delivery_end?: string | null
   approval_notes?: Record<string, unknown> | null
+  design_meeting_requested?: boolean
   customer?: Customer
 }
 
@@ -252,7 +254,7 @@ export interface DesignMeetingNote {
 
 export interface ShoppingListItem {
   id: string
-  project_id: string
+  project_id: string | null
   created_at: string
   item: string
   purchased: boolean
