@@ -316,6 +316,24 @@ export interface ShoppingListItem {
   project?: Project
 }
 
+export type SampleType = 'wood_species' | 'stain_color' | 'paint_color' | 'hardware' | 'other'
+
+export interface Sample {
+  id: string
+  created_at: string
+  project_id: string
+  customer_id: string | null
+  sample_type: SampleType
+  description: string
+  date_given: string          // 'YYYY-MM-DD'
+  checked_in: boolean
+  checked_in_date: string | null
+  notes: string | null
+  // joined
+  project?: Project
+  customer?: Customer
+}
+
 export type TouchupStatus = 'open' | 'in_progress' | 'done'
 export type TouchupPriority = 'normal' | 'urgent'
 

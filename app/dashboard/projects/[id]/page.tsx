@@ -17,12 +17,13 @@ import {
   getFilesByProjectId, uploadProjectFile, getProjectFileUrl, deleteProjectFile,
   getCustomProjectTypes,
   createApprovalRequest, getApprovalsByProjectId,
+  getSamplesByProjectId, createSample, updateSample, deleteSample,
 } from '@/lib/api/supabase-client'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
   Quote, ProjectStatus, ProjectType, DesignMeetingNote, PricingAddon,
   ProjectTypeField, ProjectTypeAnswer, ProjectFile, CustomProjectType,
-  CustomerApproval, ApprovalType,
+  CustomerApproval, ApprovalType, Sample, SampleType,
 } from '@/lib/core/types'
 
 const APPROVAL_BASE_URL = 'https://craftflow-six.vercel.app/approve'
@@ -57,6 +58,31 @@ const QUOTE_STATUS_COLORS = {
   initial: 'bg-gray-200 text-gray-800',
   revised: 'bg-blue-100 text-blue-700',
   final: 'bg-emerald-100 text-emerald-700',
+}
+
+// Fix 2: sample type config
+const SAMPLE_TYPES: { value: SampleType; label: string }[] = [
+  { value: 'wood_species', label: 'Wood Species' },
+  { value: 'stain_color', label: 'Stain Color' },
+  { value: 'paint_color', label: 'Paint Color' },
+  { value: 'hardware', label: 'Hardware' },
+  { value: 'other', label: 'Other' },
+]
+
+const SAMPLE_TYPE_COLORS: Record<SampleType, string> = {
+  wood_species: 'bg-amber-100 text-amber-700',
+  stain_color: 'bg-purple-100 text-purple-700',
+  paint_color: 'bg-blue-100 text-blue-700',
+  hardware: 'bg-gray-200 text-gray-700',
+  other: 'bg-teal-100 text-teal-700',
+}
+
+function sampleTypeLabel(t: SampleType): string {
+  return SAMPLE_TYPES.find(s => s.value === t)?.label ?? t
+}
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
 // Fix 3: stage-aware alert logic (new pipeline)
@@ -128,6 +154,15 @@ export default function ProjectDetailPage() {
 
   // Custom project types
   const [customTypes, setCustomTypes] = useState<CustomProjectType[]>([])
+
+  // Fix 2: Samples
+  const [samples, setSamples] = useState<Sample[]>([])
+  const [showSampleForm, setShowSampleForm] = useState(false)
+  const [sampleType, setSampleType] = useState<SampleType>('wood_species')
+  const [sampleDesc, setSampleDesc] = useState('')
+  const [sampleDate, setSampleDate] = useState(todayStr())
+  const [sampleNotes, setSampleNotes] = useState('')
+  const [savingSample, setSavingSample] = useState(false)
 
   // Manual quote state
   const [showManualQuote, setShowManualQuote] = useState(false)
@@ -244,6 +279,7 @@ export default function ProjectDetailPage() {
       setPricingAddons(addons)
       setFiles(f)
       setCustomTypes(ct)
+      getSamplesByProjectId(id).then(setSamples).catch(() => {})
       getApprovalsByProjectId(id).then(setApprovals).catch(() => {})
       setPrimaryMaterial(p.primary_material ?? '')
       setRequestedAddons((p.requested_addons as string[] | undefined) ?? [])
@@ -455,6 +491,40 @@ export default function ProjectDetailPage() {
     } finally {
       setSavingManual(false)
     }
+  }
+
+  // Fix 2: Sample handlers
+  async function handleGiveSample(e: React.FormEvent) {
+    e.preventDefault()
+    if (!sampleDesc.trim() || !sampleDate) return
+    setSavingSample(true)
+    try {
+      const s = await createSample({
+        project_id: id,
+        customer_id: project?.customer_id ?? null,
+        sample_type: sampleType,
+        description: sampleDesc.trim(),
+        date_given: sampleDate,
+        checked_in: false,
+        checked_in_date: null,
+        notes: sampleNotes.trim() || null,
+      })
+      setSamples(prev => [s, ...prev])
+      setShowSampleForm(false)
+      setSampleType('wood_species'); setSampleDesc(''); setSampleDate(todayStr()); setSampleNotes('')
+    } finally {
+      setSavingSample(false)
+    }
+  }
+
+  async function handleCheckInSample(sample: Sample) {
+    const updated = await updateSample(sample.id, { checked_in: true, checked_in_date: todayStr() })
+    setSamples(prev => prev.map(s => s.id === sample.id ? updated : s))
+  }
+
+  async function handleDeleteSample(sampleId: string) {
+    await deleteSample(sampleId)
+    setSamples(prev => prev.filter(s => s.id !== sampleId))
   }
 
   async function handleAddNote(e: React.FormEvent) {
@@ -688,6 +758,100 @@ export default function ProjectDetailPage() {
                 placeholder="Anything else the customer mentioned..."
                 className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
+          </div>
+
+          {/* Fix 2: Samples card */}
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sm text-gray-900">Samples Given to Customer</h3>
+                {samples.some(s => !s.checked_in) && (
+                  <span className="text-xs font-semibold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                    {samples.filter(s => !s.checked_in).length} out
+                  </span>
+                )}
+              </div>
+              {!showSampleForm && (
+                <button onClick={() => setShowSampleForm(true)}
+                  className="text-sm bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3 py-1.5 rounded-lg">
+                  + Give Sample
+                </button>
+              )}
+            </div>
+
+            {samples.length === 0 && !showSampleForm && (
+              <p className="text-sm text-gray-500">No samples given yet.</p>
+            )}
+
+            {samples.length > 0 && (
+              <div className="space-y-2">
+                {samples.map(s => (
+                  <div key={s.id} className="flex items-center gap-3 border-b border-gray-200 last:border-0 pb-2 last:pb-0 text-sm">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${SAMPLE_TYPE_COLORS[s.sample_type] ?? SAMPLE_TYPE_COLORS.other}`}>
+                      {sampleTypeLabel(s.sample_type)}
+                    </span>
+                    <span className="text-gray-900 flex-1 min-w-0 truncate" title={s.notes ?? undefined}>{s.description}</span>
+                    <span className="text-xs text-gray-500 shrink-0">
+                      Given {new Date(s.date_given + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    {s.checked_in ? (
+                      <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shrink-0">
+                        Returned{s.checked_in_date ? ` ${new Date(s.checked_in_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded shrink-0">
+                          Out with Customer
+                        </span>
+                        <button onClick={() => handleCheckInSample(s)}
+                          className="text-xs text-emerald-600 hover:text-emerald-500 font-semibold shrink-0">
+                          Check In
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => handleDeleteSample(s.id)} className="text-red-600 hover:text-red-500 text-xs shrink-0">Delete</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showSampleForm && (
+              <form onSubmit={handleGiveSample} className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Sample Type</label>
+                    <select value={sampleType} onChange={e => setSampleType(e.target.value as SampleType)}
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      {SAMPLE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Date Given</label>
+                    <input type="date" value={sampleDate} onChange={e => setSampleDate(e.target.value)} required
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-gray-500 mb-1">Description *</label>
+                    <input value={sampleDesc} onChange={e => setSampleDesc(e.target.value)} required
+                      placeholder='e.g. "Walnut stain — medium brown"'
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                    <input value={sampleNotes} onChange={e => setSampleNotes(e.target.value)}
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="submit" disabled={savingSample || !sampleDesc.trim()}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg text-sm">
+                    {savingSample ? 'Saving...' : 'Save'}
+                  </button>
+                  <button type="button" onClick={() => setShowSampleForm(false)}
+                    className="text-gray-500 hover:text-gray-900 text-sm px-3">Cancel</button>
+                </div>
+              </form>
+            )}
           </div>
 
           <div className="flex items-center justify-between">

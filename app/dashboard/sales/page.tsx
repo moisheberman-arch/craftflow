@@ -6,6 +6,7 @@ import {
   getProjects, createProject, getCustomers, createCustomer,
   updateCustomer, getProjectsByCustomerId, updateProject,
   getPricingAddons, seedDefaultStepsIfEmpty, getCustomProjectTypes,
+  getSamplesOut,
 } from '@/lib/api/supabase-client'
 import { supabase } from '@/lib/supabase'
 import type { Project, ProjectStatus, Customer, ProjectType, PricingAddon, ContactPreferences, CustomProjectType } from '@/lib/core/types'
@@ -627,12 +628,23 @@ export default function SalesDashboard() {
   const [showNewProject, setShowNewProject] = useState(false)
   const [showCustomers, setShowCustomers] = useState(false)
   const [navigateTo, setNavigateTo] = useState<string | null>(null)
+  // Fix 2: count of unreturned samples per project
+  const [samplesOutCount, setSamplesOutCount] = useState<Record<string, number>>({})
 
   useEffect(() => {
     Promise.all([getProjects(), getCustomers(), getCustomProjectTypes().catch(() => [] as CustomProjectType[])])
       .then(([p, c, ct]) => { setProjects(p); setCustomers(c); setCustomTypes(ct) })
       .catch(console.error)
       .finally(() => setLoading(false))
+    getSamplesOut()
+      .then(samples => {
+        const counts: Record<string, number> = {}
+        for (const s of samples) {
+          if (s.project_id) counts[s.project_id] = (counts[s.project_id] ?? 0) + 1
+        }
+        setSamplesOutCount(counts)
+      })
+      .catch(() => {})
   }, [])
 
   // Customer modal navigates by setting state, then we use Link or window
@@ -739,6 +751,12 @@ export default function SalesDashboard() {
                         <span className="text-xs text-gray-400">
                           {new Date(project.updated_at).toLocaleDateString()}
                         </span>
+                        {/* Fix 2: unreturned samples badge */}
+                        {(samplesOutCount[project.id] ?? 0) > 0 && (
+                          <span className="text-[10px] font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">
+                            📦 {samplesOutCount[project.id]} Samples Out
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}

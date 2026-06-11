@@ -233,8 +233,6 @@ BEHAVIOR RULES:
 - The quote is not final until the sales person says "mark this as final." Until then it is initial or revised.
 - When the user says "mark this as final," confirm and end with: STATUS: FINAL`
 
-  console.log('[QA] systemPrompt first 500:', systemPrompt.slice(0, 500))
-
   // ── Build messages for OpenAI ────────────────────────────────────────────
   const chatMessages: { role: string; content: string }[] = [
     { role: 'system', content: systemPrompt },

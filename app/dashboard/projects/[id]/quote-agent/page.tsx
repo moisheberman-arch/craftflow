@@ -16,8 +16,9 @@ import {
   getFieldsByProjectType,
   getAnswersByProjectId,
   getNotesByProjectId,
+  getPricingAddons,
 } from '@/lib/api/supabase-client'
-import type { Project, Quote, AIMessage, QuoteStatus, ProjectTypeField, ProjectTypeAnswer, DesignMeetingNote } from '@/lib/core/types'
+import type { Project, Quote, AIMessage, QuoteStatus, ProjectTypeField, ProjectTypeAnswer, DesignMeetingNote, PricingAddon } from '@/lib/core/types'
 
 const DEFAULT_STEPS = [
   { name: 'Shop drawings / rendering approved', category: 'design' as const },
@@ -55,6 +56,47 @@ function buildProjectPayload(
     project_specific_details: Object.keys(typeAnswerContext).length > 0 ? typeAnswerContext : undefined,
     design_notes: designNotes.length > 0 ? designNotes.map(n => ({ date: n.created_at, notes: n.notes })) : undefined,
   }
+}
+
+// Fix 1: build a natural language project summary to pre-fill the chat input.
+// Combines whatever fields are filled in, skips empties, always ends with
+// "Please build me a quote."
+function buildPrefillSummary(
+  project: Project,
+  addonNames: string[],
+  typeAnswerContext: Record<string, string>
+): string {
+  const parts: string[] = []
+
+  const typeLabel = project.project_type ? project.project_type.replace(/_/g, ' ') : 'custom'
+  let opening = `I have a ${typeLabel} project`
+  if (project.customer?.name) opening += ` for ${project.customer.name}`
+  parts.push(opening)
+
+  if (project.primary_material) parts.push(project.primary_material.toLowerCase())
+  if (project.color_finish) parts.push(project.color_finish)
+
+  if (project.width_inches) parts.push(`${project.width_inches} inches wide`)
+  if (project.height_inches) parts.push(`${project.height_inches} inches high`)
+  if (project.depth_inches) parts.push(`${project.depth_inches} inches deep`)
+  if (project.ceiling_height_inches) parts.push(`${project.ceiling_height_inches} inch ceiling`)
+
+  // Project-type-specific answers: "Yes" answers read as the feature itself,
+  // "No" answers are skipped, anything else reads as "label: answer"
+  for (const [label, answer] of Object.entries(typeAnswerContext)) {
+    const a = (answer ?? '').trim()
+    if (!a || a.toLowerCase() === 'no') continue
+    if (a.toLowerCase() === 'yes') parts.push(label.toLowerCase())
+    else parts.push(`${label.toLowerCase()}: ${a.toLowerCase()}`)
+  }
+
+  if (addonNames.length > 0) {
+    parts.push(`with ${addonNames.map(n => n.toLowerCase()).join(' and ')}`)
+  }
+
+  if (project.notes?.trim()) parts.push(project.notes.trim())
+
+  return `${parts.join(', ')}. Please build me a quote.`
 }
 
 function parseBreakdownLines(text: string): { item: string; amount: string }[] {
@@ -132,7 +174,11 @@ export default function QuoteAgentPage() {
 
   useEffect(() => {
     async function load() {
-      const [p, q] = await Promise.all([getProjectById(id), getQuoteByProjectId(id)])
+      const [p, q, allAddons] = await Promise.all([
+        getProjectById(id),
+        getQuoteByProjectId(id),
+        getPricingAddons().catch(() => [] as PricingAddon[]),
+      ])
 
       // Collect all project context into local variables before touching state
       let ctx: Record<string, string> = {}
@@ -161,7 +207,7 @@ export default function QuoteAgentPage() {
         const hist = q.ai_conversation_history ?? []
         // Only restore an existing conversation if the user has actually sent at least one message.
         // If only an AI opening exists (or history is empty — e.g. from a manual quote), fall through
-        // and regenerate a fresh contextual opening so stale/generic messages don't persist.
+        // to the pre-filled input so stale/generic messages don't persist.
         const hasUserMessages = hist.some(m => m.role === 'user')
         if (hasUserMessages) {
           setMessages(hist)
@@ -172,35 +218,18 @@ export default function QuoteAgentPage() {
           if (lastAssistant) setBreakdown(parseBreakdownLines(lastAssistant.content))
           return
         }
-        // Quote exists but no user messages — regenerate opening with current project context
+        // Quote exists but no user messages — pre-fill with current project context
       }
 
-      // No existing conversation — call the API now using LOCAL variables (not state)
-      // to guarantee we have the correct, fully-populated data.
-      setSending(true)
-      const payload = buildProjectPayload(p, ctx, notes)
-      try {
-        const res = await fetch('/api/quote-agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: id,
-            conversationHistory: [],
-            projectDetails: payload,
-            isInitialLoad: true,
-          }),
-        })
-        const data = await res.json()
-        if (data.error) throw new Error(data.error)
-        setMessages([{
-          role: 'assistant',
-          content: data.message,
-          timestamp: new Date().toISOString(),
-        }])
-      } catch {
-        // silently ignore — page still renders, user can retry
-      } finally {
-        setSending(false)
+      // Fix 1: no existing conversation — pre-fill the input with a natural language
+      // summary built from LOCAL variables (not state). Fully editable; the AI does
+      // not respond until the user hits Send.
+      if (p) {
+        const requestedIds = (p.requested_addons as string[] | undefined) ?? []
+        const addonNames = requestedIds
+          .map(addonId => allAddons.find(a => a.id === addonId)?.name)
+          .filter((n): n is string => !!n)
+        setInput(buildPrefillSummary(p, addonNames, ctx))
       }
     }
     load().catch(console.error).finally(() => setLoading(false))

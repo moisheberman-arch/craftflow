@@ -27,6 +27,7 @@ import type {
   CustomerApproval,
   ApprovalType,
   DeliveryPhoto,
+  Sample,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -1097,6 +1098,54 @@ export async function updateCustomProjectType(
 
 export async function deleteCustomProjectType(id: string): Promise<void> {
   const { error } = await supabase.from('custom_project_types').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Samples ────────────────────────────────────────────────────────────────
+
+export async function getSamplesByProjectId(projectId: string): Promise<Sample[]> {
+  const { data, error } = await supabase
+    .from('samples')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('date_given', { ascending: false })
+  if (error) throw error
+  return data as Sample[]
+}
+
+// All unreturned samples across all projects (for dashboard badges + Master Doc)
+export async function getSamplesOut(): Promise<Sample[]> {
+  const { data, error } = await supabase
+    .from('samples')
+    .select('*, project:projects(*, customer:customers(*)), customer:customers(*)')
+    .eq('checked_in', false)
+    .order('date_given')
+  if (error) throw error
+  return data as Sample[]
+}
+
+export async function createSample(
+  input: Omit<Sample, 'id' | 'created_at' | 'project' | 'customer'>
+): Promise<Sample> {
+  const { data, error } = await supabase.from('samples').insert(input).select().single()
+  if (error) throw error
+  return data as Sample
+}
+
+export async function updateSample(
+  id: string,
+  input: Partial<Omit<Sample, 'id' | 'created_at' | 'project' | 'customer'>>
+): Promise<Sample> {
+  const { data, error } = await supabase
+    .from('samples')
+    .update(input)
+    .eq('id', id).select().single()
+  if (error) throw error
+  return data as Sample
+}
+
+export async function deleteSample(id: string): Promise<void> {
+  const { error } = await supabase.from('samples').delete().eq('id', id)
   if (error) throw error
 }
 

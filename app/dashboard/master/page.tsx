@@ -9,8 +9,9 @@ import {
   getMaterialsByProjectId,
   getStepsByProjectId,
   getShopTaskProjects,
+  getSamplesOut,
 } from '@/lib/api/supabase-client'
-import type { Project, Touchup, OpenQuestion, MaterialItem, ProductionStep, Customer } from '@/lib/core/types'
+import type { Project, Touchup, OpenQuestion, MaterialItem, ProductionStep, Customer, Sample } from '@/lib/core/types'
 
 interface EnrichedProject extends Project {
   currentStep: ProductionStep | null
@@ -46,14 +47,16 @@ export default function MasterDocPage() {
   const [touchups, setTouchups] = useState<Touchup[]>([])
   const [questions, setQuestions] = useState<OpenQuestion[]>([])
   const [pendingMaterials, setPendingMaterials] = useState<{ project: Project; items: MaterialItem[] }[]>([])
+  const [samplesOut, setSamplesOut] = useState<Sample[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
-    const [allProjects, tu, qs] = await Promise.all([
+    const [allProjects, tu, qs, so] = await Promise.all([
       getProjects(),
       getOpenTouchups().catch(() => [] as Touchup[]),
       getUnresolvedQuestionsAllProjects().catch(() => [] as OpenQuestion[]),
+      getSamplesOut().catch(() => [] as Sample[]),
     ])
 
     const activeProjects = allProjects.filter(p =>
@@ -86,6 +89,8 @@ export default function MasterDocPage() {
     setTouchups(tu)
     setQuestions(qs)
     setPendingMaterials(matGroups.sort((a, b) => a.project.updated_at.localeCompare(b.project.updated_at)))
+    // Sort by days out descending — oldest samples at the top
+    setSamplesOut([...so].sort((a, b) => a.date_given.localeCompare(b.date_given)))
   }, [])
 
   useEffect(() => { load().finally(() => setLoading(false)) }, [load])
@@ -280,6 +285,47 @@ export default function MasterDocPage() {
                   </table>
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* Samples Currently Out */}
+        {samplesOut.length > 0 && (
+          <section>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Samples Currently Out ({samplesOut.length})</h2>
+            <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    {['Customer', 'Project Type', 'Sample', 'Date Given', 'Days Out'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {samplesOut.map(s => {
+                    const daysOut = daysSince(s.date_given + 'T00:00:00')
+                    const customerName = s.customer?.name ?? (s.project?.customer as Customer | undefined)?.name ?? 'Unknown'
+                    return (
+                      <tr key={s.id} className="border-b border-gray-200 last:border-0">
+                        <td className="px-3 py-2.5">
+                          <Link href={`/dashboard/projects/${s.project_id}?view=sales`} className="font-medium text-gray-900 hover:text-blue-600">
+                            {customerName}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-500 capitalize text-xs">{s.project?.project_type?.replace(/_/g, ' ') ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-700">{s.description}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">
+                          {new Date(s.date_given + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs">
+                          <span className={daysOut > 14 ? 'text-red-600 font-semibold' : 'text-orange-600'}>{daysOut}d</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </section>
         )}
