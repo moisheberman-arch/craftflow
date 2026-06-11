@@ -30,8 +30,8 @@ function daysUntil(dateStr: string | null | undefined) {
 }
 
 function deliveryRowColor(daysLeft: number | null, isOverdue: boolean) {
-  if (isOverdue || (daysLeft !== null && daysLeft < 0)) return 'bg-red-950/30'
-  if (daysLeft !== null && daysLeft <= 14) return 'bg-orange-950/20'
+  if (isOverdue || (daysLeft !== null && daysLeft < 0)) return 'bg-red-50/30'
+  if (daysLeft !== null && daysLeft <= 14) return 'bg-orange-50/20'
   return ''
 }
 
@@ -120,16 +120,16 @@ export default function MasterDocPage() {
         {/* Header */}
         <div className="flex items-center justify-between no-print">
           <div>
-            <h1 className="text-2xl font-bold text-white">Master Doc</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Master Doc</h1>
             <p className="text-sm text-gray-500 mt-0.5">Full business snapshot</p>
           </div>
           <div className="flex gap-3">
             <button onClick={handleRefresh} disabled={refreshing}
-              className="text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-200 px-4 py-2 rounded-lg">
+              className="text-sm bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 px-4 py-2 rounded-lg">
               {refreshing ? 'Refreshing...' : '↻ Refresh'}
             </button>
             <button onClick={() => window.print()}
-              className="text-sm bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-lg">
+              className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg">
               🖨 Print
             </button>
           </div>
@@ -138,14 +138,14 @@ export default function MasterDocPage() {
         {/* Section 6: Shop Task Summary (top for quick glance) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { label: 'Action Required', value: actionTasks.length, color: 'text-emerald-400' },
-            { label: 'Waiting On', value: waitingTasks.length, color: 'text-orange-400' },
-            { label: 'Urgent Touch-Ups', value: urgentTouchups.length, color: 'text-red-400' },
-            { label: 'Open Questions', value: questions.length, color: 'text-yellow-400' },
+            { label: 'Action Required', value: actionTasks.length, color: 'text-emerald-600' },
+            { label: 'Waiting On', value: waitingTasks.length, color: 'text-orange-600' },
+            { label: 'Urgent Touch-Ups', value: urgentTouchups.length, color: 'text-red-600' },
+            { label: 'Open Questions', value: questions.length, color: 'text-yellow-600' },
             { label: 'Overdue Projects', value: overdue.length, color: 'text-red-500' },
-            { label: 'In Queue', value: inQueue.length, color: 'text-blue-400' },
+            { label: 'In Queue', value: inQueue.length, color: 'text-blue-600' },
           ].map(s => (
-            <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+            <div key={s.label} className="bg-white shadow-sm border border-gray-200 rounded-xl p-3 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
               <p className="text-[10px] text-gray-500 mt-0.5 uppercase tracking-wide">{s.label}</p>
             </div>
@@ -154,11 +154,11 @@ export default function MasterDocPage() {
 
         {/* Section 1: Active Projects */}
         <section>
-          <h2 className="text-lg font-bold text-white mb-3">Active Projects</h2>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <h2 className="text-lg font-bold text-gray-900 mb-3">Active Projects</h2>
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800">
+                <tr className="border-b border-gray-200">
                   {['Customer', 'Type', 'Status', 'Current Step', 'Delivery', 'Last Update'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
@@ -166,22 +166,22 @@ export default function MasterDocPage() {
               </thead>
               <tbody>
                 {projects.map(p => (
-                  <tr key={p.id} className={`border-b border-gray-800 last:border-0 ${deliveryRowColor(p.deliveryDaysLeft, p.isOverdue)}`}>
+                  <tr key={p.id} className={`border-b border-gray-200 last:border-0 ${deliveryRowColor(p.deliveryDaysLeft, p.isOverdue)}`}>
                     <td className="px-3 py-2.5">
-                      <Link href={`/dashboard/projects/${p.id}?view=sales`} className="font-medium text-white hover:text-amber-400">
+                      <Link href={`/dashboard/projects/${p.id}?view=sales`} className="font-medium text-gray-900 hover:text-blue-600">
                         {(p.customer as Customer | undefined)?.name ?? 'Unknown'}
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5 text-gray-400 capitalize text-xs">{p.project_type?.replace(/_/g, ' ') ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-gray-500 capitalize text-xs">{p.project_type?.replace(/_/g, ' ') ?? '—'}</td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[10px] font-semibold bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-semibold bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
                         {STATUS_LABELS[p.status ?? ''] ?? p.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-300 max-w-[200px] truncate">{p.currentStep?.step_name ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-xs text-gray-700 max-w-[200px] truncate">{p.currentStep?.step_name ?? '—'}</td>
                     <td className="px-3 py-2.5 text-xs">
                       {p.expected_delivery_end ? (
-                        <span className={p.isOverdue ? 'text-red-400' : p.isUrgent ? 'text-orange-400' : 'text-emerald-400'}>
+                        <span className={p.isOverdue ? 'text-red-600' : p.isUrgent ? 'text-orange-600' : 'text-emerald-600'}>
                           {new Date(p.expected_delivery_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           {p.isOverdue && ' ⚠'}
                         </span>
@@ -191,7 +191,7 @@ export default function MasterDocPage() {
                   </tr>
                 ))}
                 {projects.length === 0 && (
-                  <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-600 text-xs">No active projects</td></tr>
+                  <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400 text-xs">No active projects</td></tr>
                 )}
               </tbody>
             </table>
@@ -201,15 +201,15 @@ export default function MasterDocPage() {
         {/* Section 2: Open Touch-Ups */}
         {touchups.length > 0 && (
           <section>
-            <h2 className="text-lg font-bold text-white mb-3">Open Touch-Ups</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Open Touch-Ups</h2>
             <div className="space-y-2">
               {[...urgentTouchups, ...normalTouchups].map(t => (
-                <div key={t.id} className={`flex items-start gap-3 bg-gray-900 border rounded-xl px-4 py-3 ${t.priority === 'urgent' ? 'border-red-800' : 'border-gray-800'}`}>
-                  {t.priority === 'urgent' && <span className="text-[10px] font-semibold bg-red-800 text-red-200 px-1.5 py-0.5 rounded uppercase shrink-0">Urgent</span>}
-                  <p className="text-sm text-white font-medium flex-1">{t.description}</p>
-                  {t.assigned_to && <p className="text-xs text-gray-400 shrink-0">{t.assigned_to}</p>}
+                <div key={t.id} className={`flex items-start gap-3 bg-white shadow-sm border rounded-xl px-4 py-3 ${t.priority === 'urgent' ? 'border-red-200' : 'border-gray-200'}`}>
+                  {t.priority === 'urgent' && <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase shrink-0">Urgent</span>}
+                  <p className="text-sm text-gray-900 font-medium flex-1">{t.description}</p>
+                  {t.assigned_to && <p className="text-xs text-gray-500 shrink-0">{t.assigned_to}</p>}
                   {t.address && <p className="text-xs text-gray-500 shrink-0">📍 {t.address}</p>}
-                  <p className="text-xs text-gray-600 shrink-0">{daysSince(t.created_at)}d</p>
+                  <p className="text-xs text-gray-400 shrink-0">{daysSince(t.created_at)}d</p>
                 </div>
               ))}
             </div>
@@ -219,22 +219,22 @@ export default function MasterDocPage() {
         {/* Section 3: Pending Questions */}
         {questions.length > 0 && (
           <section>
-            <h2 className="text-lg font-bold text-white mb-3">Pending Questions ({questions.length})</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Pending Questions ({questions.length})</h2>
             <div className="space-y-3">
               {Array.from(qByProject.entries()).map(([pid, qs]) => {
                 const proj = projects.find(p => p.id === pid)
                 const label = proj ? `${(proj.customer as Customer | undefined)?.name ?? 'Unknown'} — ${proj.project_type?.replace(/_/g, ' ') ?? 'Project'}` : 'Unknown Project'
                 return (
-                  <div key={pid} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div key={pid} className="bg-white shadow-sm border border-gray-200 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="font-semibold text-sm text-white">{label}</p>
-                      <Link href={`/dashboard/projects/${pid}?view=shop`} className="text-xs text-amber-400 hover:text-amber-300 no-print">Go →</Link>
+                      <p className="font-semibold text-sm text-gray-900">{label}</p>
+                      <Link href={`/dashboard/projects/${pid}?view=shop`} className="text-xs text-blue-600 hover:text-blue-500 no-print">Go →</Link>
                     </div>
                     <div className="space-y-1">
                       {qs.map(q => (
                         <div key={q.id} className="flex items-start gap-2 text-xs">
-                          <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-900 text-blue-200' : 'bg-gray-700 text-gray-300'}`}>{q.directed_at}</span>
-                          <span className="text-gray-300">{q.question}</span>
+                          <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'}`}>{q.directed_at}</span>
+                          <span className="text-gray-700">{q.question}</span>
                         </div>
                       ))}
                     </div>
@@ -248,29 +248,29 @@ export default function MasterDocPage() {
         {/* Section 4: Materials Pending */}
         {pendingMaterials.length > 0 && (
           <section>
-            <h2 className="text-lg font-bold text-white mb-3">Materials Pending</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Materials Pending</h2>
             <div className="space-y-3">
               {pendingMaterials.map(({ project: p, items }) => (
-                <div key={p.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div key={p.id} className="bg-white shadow-sm border border-gray-200 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="font-semibold text-sm text-white">
+                    <p className="font-semibold text-sm text-gray-900">
                       {(p.customer as Customer | undefined)?.name ?? 'Unknown'} — {p.project_type?.replace(/_/g, ' ') ?? '—'}
                     </p>
-                    <Link href={`/dashboard/projects/${p.id}?view=shop`} className="text-xs text-amber-400 hover:text-amber-300 no-print">Go →</Link>
+                    <Link href={`/dashboard/projects/${p.id}?view=shop`} className="text-xs text-blue-600 hover:text-blue-500 no-print">Go →</Link>
                   </div>
                   <table className="w-full text-xs">
                     <tbody>
                       {items.map(m => (
-                        <tr key={m.id} className="border-b border-gray-800 last:border-0">
-                          <td className="py-1.5 text-gray-200">{m.item_name}</td>
+                        <tr key={m.id} className="border-b border-gray-200 last:border-0">
+                          <td className="py-1.5 text-gray-800">{m.item_name}</td>
                           <td className="py-1.5 text-gray-500 text-right">{m.cost_estimate != null ? `$${m.cost_estimate}` : '—'}</td>
                           <td className="py-1.5 pl-3">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.ordered ? 'bg-emerald-900 text-emerald-200' : 'bg-gray-700 text-gray-400'}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.ordered ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
                               {m.ordered ? 'Ordered' : 'Not Ordered'}
                             </span>
                           </td>
                           <td className="py-1.5 pl-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.received ? 'bg-emerald-900 text-emerald-200' : 'bg-gray-700 text-gray-400'}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.received ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
                               {m.received ? 'Received' : 'Not Received'}
                             </span>
                           </td>
@@ -287,11 +287,11 @@ export default function MasterDocPage() {
         {/* Section 5: Projects In Queue */}
         {inQueue.length > 0 && (
           <section>
-            <h2 className="text-lg font-bold text-white mb-3">Projects In Queue</h2>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Projects In Queue</h2>
+            <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-gray-200">
                     {['Customer', 'Type', 'Days in Queue', 'Expected Delivery'].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
                     ))}
@@ -299,10 +299,10 @@ export default function MasterDocPage() {
                 </thead>
                 <tbody>
                   {inQueue.map(p => (
-                    <tr key={p.id} className="border-b border-gray-800 last:border-0">
-                      <td className="px-3 py-2.5 font-medium text-white">{(p.customer as Customer | undefined)?.name ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-gray-400 capitalize text-xs">{p.project_type?.replace(/_/g, ' ') ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-300">{p.currentStep ? daysSince(p.currentStep.created_at) + 'd' : '—'}</td>
+                    <tr key={p.id} className="border-b border-gray-200 last:border-0">
+                      <td className="px-3 py-2.5 font-medium text-gray-900">{(p.customer as Customer | undefined)?.name ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 capitalize text-xs">{p.project_type?.replace(/_/g, ' ') ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-700">{p.currentStep ? daysSince(p.currentStep.created_at) + 'd' : '—'}</td>
                       <td className="px-3 py-2.5 text-xs">
                         {p.expected_delivery_end ? new Date(p.expected_delivery_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </td>

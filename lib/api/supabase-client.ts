@@ -22,6 +22,11 @@ import type {
   ProjectTypeAnswer,
   ProjectFile,
   CustomProjectType,
+  Supplier,
+  SupplierMaterial,
+  CustomerApproval,
+  ApprovalType,
+  DeliveryPhoto,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -875,6 +880,193 @@ export async function deleteProjectFile(id: string, filePath: string): Promise<v
   await supabase.storage.from('project-files').remove([filePath])
   const { error } = await supabase.from('project_files').delete().eq('id', id)
   if (error) throw error
+}
+
+// ── Suppliers ──────────────────────────────────────────────────────────────
+
+export async function getSuppliers(): Promise<Supplier[]> {
+  const { data, error } = await supabase.from('suppliers').select('*').order('name')
+  if (error) throw error
+  return data as Supplier[]
+}
+
+export async function getSupplierById(id: string): Promise<Supplier | null> {
+  const { data, error } = await supabase.from('suppliers').select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data as Supplier | null
+}
+
+export async function createSupplier(
+  input: Partial<Omit<Supplier, 'id' | 'created_at' | 'updated_at'>> & { name: string }
+): Promise<Supplier> {
+  const { data, error } = await supabase.from('suppliers').insert(input).select().single()
+  if (error) throw error
+  return data as Supplier
+}
+
+export async function updateSupplier(
+  id: string,
+  input: Partial<Omit<Supplier, 'id' | 'created_at'>>
+): Promise<Supplier> {
+  const { data, error } = await supabase
+    .from('suppliers')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', id).select().single()
+  if (error) throw error
+  return data as Supplier
+}
+
+export async function deleteSupplier(id: string): Promise<void> {
+  const { error } = await supabase.from('suppliers').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function getSupplierMaterials(supplierId: string): Promise<SupplierMaterial[]> {
+  const { data, error } = await supabase
+    .from('supplier_materials').select('*').eq('supplier_id', supplierId).order('material_name')
+  if (error) throw error
+  return data as SupplierMaterial[]
+}
+
+export async function addSupplierMaterial(
+  supplierId: string,
+  input: Partial<Omit<SupplierMaterial, 'id' | 'supplier_id'>>
+): Promise<SupplierMaterial> {
+  const { data, error } = await supabase
+    .from('supplier_materials').insert({ ...input, supplier_id: supplierId }).select().single()
+  if (error) throw error
+  return data as SupplierMaterial
+}
+
+export async function updateSupplierMaterial(
+  id: string,
+  input: Partial<Omit<SupplierMaterial, 'id' | 'supplier_id'>>
+): Promise<SupplierMaterial> {
+  const { data, error } = await supabase
+    .from('supplier_materials').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data as SupplierMaterial
+}
+
+export async function deleteSupplierMaterial(id: string): Promise<void> {
+  const { error } = await supabase.from('supplier_materials').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Customer Approvals ─────────────────────────────────────────────────────
+
+export async function createApprovalRequest(
+  projectId: string,
+  approvalType: ApprovalType,
+  fileUrl: string | null
+): Promise<CustomerApproval> {
+  const token = crypto.randomUUID()
+  const expires = new Date()
+  expires.setDate(expires.getDate() + 7)
+  const { data, error } = await supabase
+    .from('customer_approvals')
+    .insert({
+      project_id: projectId,
+      approval_type: approvalType,
+      token,
+      expires_at: expires.toISOString(),
+      approved: false,
+      file_url: fileUrl,
+      sent_at: new Date().toISOString(),
+    })
+    .select().single()
+  if (error) throw error
+  return data as CustomerApproval
+}
+
+export async function getApprovalsByProjectId(projectId: string): Promise<CustomerApproval[]> {
+  const { data, error } = await supabase
+    .from('customer_approvals').select('*').eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as CustomerApproval[]
+}
+
+export async function getApprovalByToken(token: string): Promise<CustomerApproval | null> {
+  const { data, error } = await supabase
+    .from('customer_approvals').select('*').eq('token', token).maybeSingle()
+  if (error) throw error
+  return data as CustomerApproval | null
+}
+
+export async function markApproved(token: string, customerNotes: string | null): Promise<CustomerApproval> {
+  const { data, error } = await supabase
+    .from('customer_approvals')
+    .update({ approved: true, approved_at: new Date().toISOString(), customer_notes: customerNotes })
+    .eq('token', token).select().single()
+  if (error) throw error
+  return data as CustomerApproval
+}
+
+export async function deleteApproval(id: string): Promise<void> {
+  const { error } = await supabase.from('customer_approvals').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Delivery Photos ────────────────────────────────────────────────────────
+
+export async function getDeliveryPhotosByProjectId(projectId: string): Promise<DeliveryPhoto[]> {
+  const { data, error } = await supabase
+    .from('delivery_photos').select('*').eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as DeliveryPhoto[]
+}
+
+export async function uploadDeliveryPhoto(
+  projectId: string,
+  file: File,
+  caption?: string
+): Promise<DeliveryPhoto> {
+  const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_')
+  const path = `delivery-photos/${projectId}/${Date.now()}-${safeName}`
+  const { error: storageErr } = await supabase.storage
+    .from('project-files')
+    .upload(path, file, { upsert: false })
+  if (storageErr) throw storageErr
+  const { data, error } = await supabase.from('delivery_photos').insert({
+    project_id: projectId,
+    file_path: path,
+    file_name: file.name,
+    caption: caption || null,
+  }).select().single()
+  if (error) throw error
+  return data as DeliveryPhoto
+}
+
+export function getDeliveryPhotoUrl(filePath: string): string {
+  const { data } = supabase.storage.from('project-files').getPublicUrl(filePath)
+  return data.publicUrl
+}
+
+export async function deleteDeliveryPhoto(id: string, filePath: string): Promise<void> {
+  await supabase.storage.from('project-files').remove([filePath])
+  const { error } = await supabase.from('delivery_photos').delete().eq('id', id)
+  if (error) throw error
+}
+
+// All completed projects that have delivery photos (for the portfolio page)
+export async function getPortfolioProjects(): Promise<{ project: Project; photos: DeliveryPhoto[] }[]> {
+  const { data: photos, error } = await supabase
+    .from('delivery_photos').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  const byProject = new Map<string, DeliveryPhoto[]>()
+  for (const ph of (photos ?? []) as DeliveryPhoto[]) {
+    if (!byProject.has(ph.project_id)) byProject.set(ph.project_id, [])
+    byProject.get(ph.project_id)!.push(ph)
+  }
+  if (byProject.size === 0) return []
+  const { data: projects } = await supabase
+    .from('projects').select('*, customer:customers(*)')
+    .in('id', Array.from(byProject.keys()))
+  return ((projects ?? []) as Project[])
+    .map(p => ({ project: p, photos: byProject.get(p.id) ?? [] }))
+    .sort((a, b) => (b.project.updated_at ?? '').localeCompare(a.project.updated_at ?? ''))
 }
 
 // ── Custom Project Types ───────────────────────────────────────────────────

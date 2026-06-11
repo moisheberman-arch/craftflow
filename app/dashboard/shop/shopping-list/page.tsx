@@ -57,10 +57,10 @@ export default function ShoppingListPage() {
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard/shop" className="text-gray-500 hover:text-gray-300 text-sm">← Shop</Link>
+          <Link href="/dashboard/shop" className="text-gray-500 hover:text-gray-700 text-sm">← Shop</Link>
           <h1 className="text-2xl font-bold">Shopping List</h1>
           {totalCount > 0 && (
-            <span className="bg-amber-500 text-gray-950 text-xs font-bold px-2 py-0.5 rounded-full">
+            <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
               {totalCount}
             </span>
           )}
@@ -79,22 +79,22 @@ export default function ShoppingListPage() {
           {groups.map(group => (
             <div key={group.projectId}>
               <div className="flex items-center gap-2 mb-2">
-                <h2 className="font-semibold text-white">{group.label}</h2>
-                <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
+                <h2 className="font-semibold text-gray-900">{group.label}</h2>
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
                   {group.items.length}
                 </span>
                 <Link
                   href={`/dashboard/projects/${group.projectId}?view=shop`}
-                  className="text-xs text-amber-400 hover:text-amber-300 ml-auto"
+                  className="text-xs text-blue-600 hover:text-blue-500 ml-auto"
                 >
                   View Project →
                 </Link>
               </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+              <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
                 {group.items.map(item => (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 last:border-0 hover:bg-gray-800/40"
+                    className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 last:border-0 hover:bg-blue-50/40"
                   >
                     <input
                       type="checkbox"
@@ -102,7 +102,7 @@ export default function ShoppingListPage() {
                       onChange={() => handlePurchased(item)}
                       className="accent-emerald-500 w-4 h-4 shrink-0 cursor-pointer"
                     />
-                    <span className="flex-1 text-sm text-white">{item.item}</span>
+                    <span className="flex-1 text-sm text-gray-900">{item.item}</span>
                     {item.notes && (
                       <span className="text-xs text-gray-500">{item.notes}</span>
                     )}

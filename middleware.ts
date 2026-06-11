@@ -4,7 +4,13 @@ export function middleware(req: NextRequest) {
   const session = req.cookies.get('cf_session')
   const { pathname } = req.nextUrl
 
-  if (pathname.startsWith('/login') || pathname.startsWith('/api/login')) {
+  // Public routes: login + customer approval links (no auth required)
+  if (
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/api/login') ||
+    pathname.startsWith('/approve') ||
+    pathname.startsWith('/api/approve')
+  ) {
     return NextResponse.next()
   }
 

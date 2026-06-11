@@ -382,21 +382,21 @@ export default function QuoteAgentPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-3">
-          <Link href={`/dashboard/projects/${id}`} className="text-gray-400 hover:text-white text-sm">
+          <Link href={`/dashboard/projects/${id}`} className="text-gray-500 hover:text-gray-900 text-sm">
             ← Back to Project
           </Link>
-          <span className="text-gray-600">|</span>
+          <span className="text-gray-400">|</span>
           <h1 className="text-lg font-semibold">
             AI Quote Agent
             {project?.customer?.name && (
-              <span className="text-gray-400 font-normal ml-2">— {project.customer.name}</span>
+              <span className="text-gray-500 font-normal ml-2">— {project.customer.name}</span>
             )}
           </h1>
           {quote?.status && (
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-              quote.status === 'final' ? 'bg-emerald-900 text-emerald-200' :
-              quote.status === 'revised' ? 'bg-blue-900 text-blue-200' :
-              'bg-gray-700 text-gray-300'
+              quote.status === 'final' ? 'bg-emerald-100 text-emerald-700' :
+              quote.status === 'revised' ? 'bg-blue-100 text-blue-700' :
+              'bg-gray-200 text-gray-700'
             }`}>
               {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
               {(quote.version ?? 1) > 1 && ` v${quote.version}`}
@@ -408,15 +408,15 @@ export default function QuoteAgentPage() {
       {/* Split layout */}
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Left: Chat */}
-        <div className="flex flex-col flex-1 min-w-0 bg-gray-900 rounded-xl border border-gray-800">
+        <div className="flex flex-col flex-1 min-w-0 bg-white shadow-sm rounded-xl border border-gray-200">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ${
                   msg.role === 'user'
-                    ? 'bg-amber-500 text-gray-950'
-                    : 'bg-gray-800 text-gray-100'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-900'
                 }`}>
                   {msg.content}
                 </div>
@@ -424,7 +424,7 @@ export default function QuoteAgentPage() {
             ))}
             {sending && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 rounded-xl px-4 py-3 text-sm text-gray-400">
+                <div className="bg-gray-100 rounded-xl px-4 py-3 text-sm text-gray-500">
                   <span className="animate-pulse">Thinking...</span>
                 </div>
               </div>
@@ -433,7 +433,7 @@ export default function QuoteAgentPage() {
           </div>
 
           {/* Input */}
-          <div className="p-4 border-t border-gray-800">
+          <div className="p-4 border-t border-gray-200">
             <div className="flex gap-2">
               <textarea
                 value={input}
@@ -442,7 +442,7 @@ export default function QuoteAgentPage() {
                 disabled={sending}
                 placeholder="Describe the project — dimensions, materials, special features..."
                 rows={3}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               />
               <div className="flex flex-col gap-2 self-end">
                 {/* Fix 4: Mic button — hidden if Web Speech API not supported */}
@@ -454,7 +454,7 @@ export default function QuoteAgentPage() {
                     className={`w-10 h-10 flex items-center justify-center rounded-lg text-lg transition-all ${
                       isListening
                         ? 'bg-red-600 hover:bg-red-500 animate-pulse text-white'
-                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                     }`}
                   >
                     🎙️
@@ -463,13 +463,13 @@ export default function QuoteAgentPage() {
                 <button
                   onClick={sendMessage}
                   disabled={sending || !input.trim()}
-                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold px-4 py-2 rounded-lg text-sm"
                 >
                   Send
                 </button>
               </div>
             </div>
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Enter to send · Shift+Enter for newline
               {speechSupported && <span> · 🎙️ Voice input works best in Chrome</span>}
             </p>
@@ -479,34 +479,34 @@ export default function QuoteAgentPage() {
         {/* Right: Quote Summary */}
         <div className="w-80 shrink-0 flex flex-col gap-4 overflow-y-auto">
           {/* Price */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-xs text-gray-400 mb-1">Final Price</p>
-            <p className="text-3xl font-bold text-amber-400">
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-4">
+            <p className="text-xs text-gray-500 mb-1">Final Price</p>
+            <p className="text-3xl font-bold text-blue-600">
               {finalPrice != null ? `$${finalPrice.toLocaleString()}` : '—'}
             </p>
           </div>
 
           {/* Scope */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex-1">
-            <p className="text-xs text-gray-400 mb-2">Scope of Work</p>
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-4 flex-1">
+            <p className="text-xs text-gray-500 mb-2">Scope of Work</p>
             <textarea
               value={scopeOfWork}
               onChange={e => setScopeOfWork(e.target.value)}
               rows={5}
               placeholder="Scope will appear here when the AI generates it..."
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white resize-none focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="w-full bg-gray-100 border border-gray-300 rounded-lg px-2 py-2 text-xs text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
           {/* Cost Breakdown */}
           {breakdown.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-2">Cost Breakdown</p>
+            <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-4">
+              <p className="text-xs text-gray-500 mb-2">Cost Breakdown</p>
               <div className="space-y-1">
                 {breakdown.map((b, i) => (
                   <div key={i} className="flex justify-between text-xs">
-                    <span className="text-gray-300 truncate mr-2">{b.item}</span>
-                    <span className="text-amber-400 shrink-0 font-mono">{b.amount}</span>
+                    <span className="text-gray-700 truncate mr-2">{b.item}</span>
+                    <span className="text-blue-600 shrink-0 font-mono">{b.amount}</span>
                   </div>
                 ))}
               </div>
@@ -515,41 +515,41 @@ export default function QuoteAgentPage() {
 
           {/* Complexity */}
           {complexity && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-2">Complexity Assessment</p>
-              <p className="text-xs text-gray-300 leading-relaxed">{complexity.slice(0, 300)}</p>
+            <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-4">
+              <p className="text-xs text-gray-500 mb-2">Complexity Assessment</p>
+              <p className="text-xs text-gray-700 leading-relaxed">{complexity.slice(0, 300)}</p>
             </div>
           )}
 
           {/* Action buttons */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
-            <p className="text-xs text-gray-400 mb-2">Save Quote As</p>
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-4 space-y-2">
+            <p className="text-xs text-gray-500 mb-2">Save Quote As</p>
             <button
               onClick={() => saveQuoteStatus('initial')}
               disabled={!!savingStatus}
-              className="w-full text-sm py-2 rounded-lg border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-50 transition-colors"
+              className="w-full text-sm py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-blue-50 disabled:opacity-50 transition-colors"
             >
               {savingStatus === 'initial' ? 'Saving...' : 'Save as Initial'}
             </button>
             <button
               onClick={() => saveQuoteStatus('revised')}
               disabled={!!savingStatus}
-              className="w-full text-sm py-2 rounded-lg border border-blue-700 text-blue-300 hover:bg-blue-950 disabled:opacity-50 transition-colors"
+              className="w-full text-sm py-2 rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-colors"
             >
               {savingStatus === 'revised' ? 'Saving...' : 'Save as Revised'}
             </button>
             <button
               onClick={() => saveQuoteStatus('final')}
               disabled={!!savingStatus || quote?.status === 'final'}
-              className="w-full text-sm py-2 rounded-lg bg-emerald-800 text-emerald-200 hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold"
+              className="w-full text-sm py-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold"
             >
               {savingStatus === 'final' ? 'Saving...' : quote?.status === 'final' ? '✓ Marked Final' : 'Mark as Final'}
             </button>
             {statusSaved && (
-              <p className="text-xs text-emerald-400 text-center">Saved!</p>
+              <p className="text-xs text-emerald-600 text-center">Saved!</p>
             )}
             {quote?.status === 'final' && (
-              <p className="text-xs text-emerald-400 text-center mt-1">
+              <p className="text-xs text-emerald-600 text-center mt-1">
                 Materials checklist and production steps auto-populated.
               </p>
             )}

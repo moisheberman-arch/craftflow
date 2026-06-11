@@ -93,6 +93,60 @@ export interface CalendarEvent {
   notes: string | null
   project_id: string | null
   event_type: CalendarEventType
+  event_time?: string | null      // 'HH:MM:SS'
+  duration_minutes?: number | null
+}
+
+export type SupplierCategory = 'wood' | 'hardware' | 'finish' | 'trim' | 'lighting' | 'other'
+
+export interface Supplier {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  contact_name: string | null
+  phone: string | null
+  email: string | null
+  address: string | null
+  website: string | null
+  what_they_supply: string | null
+  categories: SupplierCategory[]
+  notes: string | null
+}
+
+export interface SupplierMaterial {
+  id: string
+  supplier_id: string
+  material_name: string | null
+  unit: string | null
+  unit_price: number | null
+  notes: string | null
+}
+
+export type ApprovalType = 'sketch' | 'rendering' | 'quote' | 'other'
+
+export interface CustomerApproval {
+  id: string
+  created_at: string
+  project_id: string
+  approval_type: ApprovalType
+  token: string
+  expires_at: string | null
+  approved: boolean
+  approved_at: string | null
+  customer_notes: string | null
+  file_url: string | null
+  sent_at: string | null
+}
+
+export interface DeliveryPhoto {
+  id: string
+  created_at: string
+  project_id: string
+  file_path: string
+  file_name: string
+  caption: string | null
+  taken_at: string
 }
 
 export interface MaterialItem {

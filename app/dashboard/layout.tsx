@@ -28,17 +28,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
-        <Link href="/dashboard/sales" className="text-lg font-bold text-amber-400 tracking-tight">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      <nav className="bg-white shadow-sm border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <Link href="/dashboard/sales" className="text-lg font-bold text-blue-600 tracking-tight">
           CraftFlow
         </Link>
 
-        <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           <Link
             href="/dashboard/sales"
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              isSales ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white'
+              isSales ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-900'
             }`}
           >
             Sales View
@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link
             href="/dashboard/shop"
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              isShop ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white'
+              isShop ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-900'
             }`}
           >
             Shop View
@@ -55,15 +55,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="flex items-center gap-4">
           <Link
+            href="/dashboard/suppliers"
+            className={`text-sm transition-colors ${pathname.startsWith('/dashboard/suppliers') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+          >
+            Suppliers
+          </Link>
+          <Link
+            href="/dashboard/portfolio"
+            className={`text-sm transition-colors ${pathname.startsWith('/dashboard/portfolio') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+          >
+            Portfolio
+          </Link>
+          <Link
             href="/dashboard/master"
-            className={`text-sm transition-colors ${isMaster ? 'text-amber-400' : 'text-gray-400 hover:text-white'}`}
+            className={`text-sm transition-colors ${isMaster ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
           >
             Master Doc
           </Link>
           <Link
             href="/dashboard/touchups"
             className={`text-sm transition-colors flex items-center gap-1.5 ${
-              isTouchups ? 'text-amber-400' : 'text-gray-400 hover:text-white'
+              isTouchups ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'
             }`}
           >
             Touch-Ups
@@ -74,21 +86,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </Link>
           <div className="relative group">
-            <button className={`text-sm transition-colors ${isSettings ? 'text-amber-400' : 'text-gray-400 hover:text-white'}`}>
+            <button className={`text-sm transition-colors ${isSettings ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               Settings ▾
             </button>
             <div className="absolute right-0 top-full pt-1 hidden group-hover:block z-50">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg shadow-xl overflow-hidden min-w-[160px]">
-                <Link href="/dashboard/settings/pricing" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Pricing Config</Link>
-                <Link href="/dashboard/settings/project-types" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Project Types</Link>
-                <Link href="/dashboard/settings/steps" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Step Templates</Link>
-                <Link href="/dashboard/settings/manage-projects" className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Manage Projects</Link>
+              <div className="bg-white shadow-sm border border-gray-200 rounded-lg shadow-xl overflow-hidden min-w-[160px]">
+                <Link href="/dashboard/settings/pricing" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Pricing Config</Link>
+                <Link href="/dashboard/settings/project-types" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Project Types</Link>
+                <Link href="/dashboard/settings/steps" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Step Templates</Link>
+                <Link href="/dashboard/settings/manage-projects" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Manage Projects</Link>
               </div>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
           >
             Logout
           </button>

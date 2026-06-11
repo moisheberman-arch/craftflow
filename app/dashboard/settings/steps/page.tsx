@@ -38,37 +38,37 @@ function StepForm({ initial, saving, onSave, onCancel }: {
   }
 
   return (
-    <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
+    <div className="bg-gray-100/60 border border-gray-300 rounded-lg p-4 space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
-          <label className="block text-xs text-gray-400 mb-1">Step Name *</label>
+          <label className="block text-xs text-gray-500 mb-1">Step Name *</label>
           <input value={v.step_name} onChange={e => setV(prev => ({ ...prev, step_name: e.target.value }))}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+            className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Step Type</label>
+          <label className="block text-xs text-gray-500 mb-1">Step Type</label>
           <select value={v.step_type}
             onChange={e => setV(prev => ({ ...prev, step_type: e.target.value as StepType, waiting_on: e.target.value === 'action' ? '' : prev.waiting_on }))}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+            className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
             <option value="action">Action</option>
             <option value="waiting">Waiting</option>
           </select>
         </div>
         {v.step_type === 'waiting' && (
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Waiting On</label>
+            <label className="block text-xs text-gray-500 mb-1">Waiting On</label>
             <select value={v.waiting_on} onChange={e => setV(prev => ({ ...prev, waiting_on: e.target.value as WaitingOn | '' }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+              className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
               <option value="">—</option>
               {WAITING_OPTIONS.map(w => <option key={w} value={w} className="capitalize">{w}</option>)}
             </select>
           </div>
         )}
         <div className="flex items-end pb-1">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
             <input type="checkbox" checked={v.is_optional}
               onChange={e => setV(prev => ({ ...prev, is_optional: e.target.checked }))}
-              className="accent-amber-500 w-4 h-4" />
+              className="accent-blue-600 w-4 h-4" />
             Optional step
           </label>
         </div>
@@ -76,14 +76,14 @@ function StepForm({ initial, saving, onSave, onCancel }: {
 
       {/* Suggested sub-tasks */}
       <div>
-        <label className="block text-xs text-gray-400 mb-1">Suggested Sub-Tasks</label>
+        <label className="block text-xs text-gray-500 mb-1">Suggested Sub-Tasks</label>
         {v.suggested_subtasks.length > 0 && (
           <div className="space-y-1 mb-2">
             {v.suggested_subtasks.map((st, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm text-gray-300 bg-gray-800 rounded px-2 py-1">
+              <div key={i} className="flex items-center gap-2 text-sm text-gray-700 bg-gray-100 rounded px-2 py-1">
                 <span className="flex-1">{st}</span>
                 <button onClick={() => setV(prev => ({ ...prev, suggested_subtasks: prev.suggested_subtasks.filter((_, j) => j !== i) }))}
-                  className="text-red-400 hover:text-red-300 text-xs">×</button>
+                  className="text-red-600 hover:text-red-600 text-xs">×</button>
               </div>
             ))}
           </div>
@@ -92,18 +92,18 @@ function StepForm({ initial, saving, onSave, onCancel }: {
           <input placeholder="Add suggested sub-task..." value={newSubtask}
             onChange={e => setNewSubtask(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSubtaskItem() } }}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+            className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
           <button onClick={addSubtaskItem} disabled={!newSubtask.trim()}
-            className="text-xs bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white px-3 rounded-lg">Add</button>
+            className="text-xs bg-gray-200 hover:bg-gray-300 disabled:opacity-40 text-gray-900 px-3 rounded-lg">Add</button>
         </div>
       </div>
 
       <div className="flex gap-2 pt-1">
         <button onClick={() => onSave(v)} disabled={saving || !v.step_name.trim()}
-          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
+          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg text-sm">
           {saving ? 'Saving...' : 'Save Step'}
         </button>
-        <button onClick={onCancel} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+        <button onClick={onCancel} className="text-gray-500 hover:text-gray-900 text-sm px-3">Cancel</button>
       </div>
     </div>
   )
@@ -188,11 +188,11 @@ export default function StepTemplatesPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
-        <Link href="/dashboard/shop" className="text-gray-500 hover:text-gray-300 text-sm">← Back</Link>
-        <h1 className="text-xl font-bold text-white">Step Templates</h1>
+        <Link href="/dashboard/shop" className="text-gray-500 hover:text-gray-700 text-sm">← Back</Link>
+        <h1 className="text-xl font-bold text-gray-900">Step Templates</h1>
       </div>
 
-      <div className="bg-blue-950/40 border border-blue-800 rounded-lg px-4 py-3 text-sm text-blue-300">
+      <div className="bg-blue-50/40 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-600">
         Changes to step templates apply to new projects only. Projects already in progress keep their existing steps.
       </div>
 
@@ -208,31 +208,31 @@ export default function StepTemplatesPage() {
                 onDragOver={e => { e.preventDefault(); setDragOverId(s.id) }}
                 onDrop={e => { e.preventDefault(); handleDrop(s.id) }}
                 onDragEnd={() => { dragId.current = null; setDragOverId(null) }}
-                className={`bg-gray-900 border rounded-xl px-4 py-3 flex items-center gap-3 ${
-                  dragOverId === s.id ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-gray-800'
+                className={`bg-white shadow-sm border rounded-xl px-4 py-3 flex items-center gap-3 ${
+                  dragOverId === s.id ? 'border-blue-400 ring-1 ring-blue-500/50' : 'border-gray-200'
                 }`}
               >
-                <span className="text-gray-600 cursor-grab active:cursor-grabbing text-base" title="Drag to reorder">⠿</span>
+                <span className="text-gray-400 cursor-grab active:cursor-grabbing text-base" title="Drag to reorder">⠿</span>
                 <span className="text-gray-500 text-sm w-6 shrink-0">{idx + 1}</span>
-                <span className="flex-1 text-sm text-white truncate">{s.step_name}</span>
+                <span className="flex-1 text-sm text-gray-900 truncate">{s.step_name}</span>
                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase shrink-0 ${
-                  s.step_type === 'waiting' ? 'bg-orange-900 text-orange-200' : 'bg-emerald-900 text-emerald-200'
+                  s.step_type === 'waiting' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
                 }`}>{s.step_type === 'waiting' ? 'Waiting' : 'Action'}</span>
                 {s.step_type === 'waiting' && s.waiting_on && (
-                  <span className="text-[10px] text-orange-300 shrink-0 capitalize">({s.waiting_on})</span>
+                  <span className="text-[10px] text-orange-600 shrink-0 capitalize">({s.waiting_on})</span>
                 )}
                 {s.is_optional && (
-                  <span className="text-[10px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded shrink-0">Optional</span>
+                  <span className="text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded shrink-0">Optional</span>
                 )}
                 {Array.isArray(s.suggested_subtasks) && s.suggested_subtasks.length > 0 && (
-                  <span className="text-[10px] bg-blue-900 text-blue-200 px-1.5 py-0.5 rounded shrink-0">
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">
                     {s.suggested_subtasks.length} sub-task{s.suggested_subtasks.length === 1 ? '' : 's'}
                   </span>
                 )}
                 <button onClick={() => { setEditingId(editingId === s.id ? null : s.id); setShowAdd(false) }}
-                  className="text-xs text-gray-400 hover:text-white shrink-0">Edit</button>
+                  className="text-xs text-gray-500 hover:text-gray-900 shrink-0">Edit</button>
                 <button onClick={() => setConfirmDeleteId(s.id)}
-                  className="text-xs text-red-400 hover:text-red-300 shrink-0">Delete</button>
+                  className="text-xs text-red-600 hover:text-red-600 shrink-0">Delete</button>
               </div>
 
               {editingId === s.id && (
@@ -264,7 +264,7 @@ export default function StepTemplatesPage() {
             />
           ) : (
             <button onClick={() => { setShowAdd(true); setEditingId(null) }}
-              className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
+              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg text-sm">
               + Add Step
             </button>
           )}
@@ -274,9 +274,9 @@ export default function StepTemplatesPage() {
       {/* Delete confirmation */}
       {confirmDeleteId && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-            <h3 className="font-semibold text-white">Delete Step Template?</h3>
-            <p className="text-sm text-gray-400">
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <h3 className="font-semibold text-gray-900">Delete Step Template?</h3>
+            <p className="text-sm text-gray-500">
               &ldquo;{steps.find(s => s.id === confirmDeleteId)?.step_name}&rdquo; will be removed from the default template.
               This will not affect projects already in progress.
             </p>
@@ -286,7 +286,7 @@ export default function StepTemplatesPage() {
                 {deletingId ? 'Deleting...' : 'Delete Step'}
               </button>
               <button onClick={() => setConfirmDeleteId(null)}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900">Cancel</button>
             </div>
           </div>
         </div>

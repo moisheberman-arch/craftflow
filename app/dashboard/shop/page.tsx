@@ -75,13 +75,35 @@ function getMissingInfoAlerts(p: EnrichedProject): string[] {
   return alerts
 }
 
+const DURATION_OPTIONS = [
+  { value: 15, label: '15 min' },
+  { value: 30, label: '30 min' },
+  { value: 60, label: '1 hour' },
+  { value: 120, label: '2 hours' },
+  { value: 240, label: 'Half day' },
+  { value: 480, label: 'Full day' },
+]
+
+function formatEventTime(t?: string | null): string {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  const ap = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return `${h12}:${String(m).padStart(2, '0')} ${ap}`
+}
+
+function durationLabel(mins?: number | null): string {
+  if (!mins) return ''
+  return DURATION_OPTIONS.find(d => d.value === mins)?.label ?? `${mins} min`
+}
+
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 // ── Mini Calendar ──────────────────────────────────────────────────────────
 
 function MiniCalendar({
-  events, month, year, onMonthChange, onAddEvent, onDeleteEvent,
+  events, month, year, onMonthChange, onAddEvent, onDeleteEvent, projectNames,
 }: {
   events: CalendarEvent[]
   month: number
@@ -89,7 +111,16 @@ function MiniCalendar({
   onMonthChange: (m: number, y: number) => void
   onAddEvent: (date: string) => void
   onDeleteEvent: (id: string) => void
+  projectNames?: Map<string, string>
 }) {
+  function tooltipFor(ev: CalendarEvent): string {
+    const parts = [ev.title]
+    if (ev.event_time) parts.push(`Time: ${formatEventTime(ev.event_time)}`)
+    if (ev.duration_minutes) parts.push(`Duration: ${durationLabel(ev.duration_minutes)}`)
+    if (ev.project_id && projectNames?.get(ev.project_id)) parts.push(`Project: ${projectNames.get(ev.project_id)}`)
+    if (ev.notes) parts.push(`Notes: ${ev.notes}`)
+    return parts.join('\n')
+  }
   const firstDay = new Date(year, month - 1, 1).getDay()
   const daysInMonth = new Date(year, month, 0).getDate()
   const today = new Date()
@@ -106,13 +137,13 @@ function MiniCalendar({
   while (cells.length % 7 !== 0) cells.push(null)
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+    <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
       <div className="flex items-center justify-between mb-3">
         <button onClick={() => month === 1 ? onMonthChange(12, year - 1) : onMonthChange(month - 1, year)}
-          className="text-gray-400 hover:text-white px-1.5 py-0.5 rounded text-sm">◀</button>
-        <h3 className="text-xs font-semibold text-white">{MONTH_NAMES[month - 1]} {year}</h3>
+          className="text-gray-500 hover:text-gray-900 px-1.5 py-0.5 rounded text-sm">◀</button>
+        <h3 className="text-xs font-semibold text-gray-900">{MONTH_NAMES[month - 1]} {year}</h3>
         <button onClick={() => month === 12 ? onMonthChange(1, year + 1) : onMonthChange(month + 1, year)}
-          className="text-gray-400 hover:text-white px-1.5 py-0.5 rounded text-sm">▶</button>
+          className="text-gray-500 hover:text-gray-900 px-1.5 py-0.5 rounded text-sm">▶</button>
       </div>
       <div className="grid grid-cols-7 mb-1">
         {DAYS_OF_WEEK.map(d => (
@@ -129,22 +160,21 @@ function MiniCalendar({
             <div
               key={i}
               onClick={() => onAddEvent(dateStr)}
-              className={`rounded p-0.5 min-h-[30px] cursor-pointer transition-colors group ${isToday ? 'bg-blue-950 border border-blue-700' : 'hover:bg-gray-800'}`}
+              className={`rounded p-0.5 min-h-[30px] cursor-pointer transition-colors group ${isToday ? 'bg-blue-50 border border-blue-300' : 'hover:bg-blue-50'}`}
             >
-              <span className={`text-[10px] font-medium block text-center ${isToday ? 'text-blue-300' : 'text-gray-400'}`}>{day}</span>
-              {dayEvents.slice(0, 1).map(ev => (
+              <span className={`text-[10px] font-medium block text-center ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>{day}</span>
+              {dayEvents.map(ev => (
                 <div key={ev.id} className="relative group/ev">
-                  <div className={`text-[8px] truncate px-0.5 rounded ${
-                    ev.event_type === 'appointment' ? 'bg-amber-900 text-amber-200' :
-                    ev.event_type === 'reminder' ? 'bg-orange-900 text-orange-200' :
-                    ev.event_type === 'milestone' ? 'bg-emerald-900 text-emerald-200' :
-                    'bg-gray-700 text-gray-300'
-                  }`}>{ev.title}</div>
+                  <div title={tooltipFor(ev)} className={`text-[8px] truncate px-0.5 rounded mb-0.5 ${
+                    ev.event_type === 'appointment' ? 'bg-amber-100 text-amber-700' :
+                    ev.event_type === 'reminder' ? 'bg-orange-100 text-orange-700' :
+                    ev.event_type === 'milestone' ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-gray-200 text-gray-700'
+                  }`}>{ev.title}{ev.event_time ? ` — ${formatEventTime(ev.event_time)}` : ''}</div>
                   <button onClick={e => { e.stopPropagation(); onDeleteEvent(ev.id) }}
                     className="absolute -top-0.5 -right-0.5 hidden group-hover/ev:flex items-center justify-center w-3 h-3 bg-red-700 text-white rounded-full text-[8px]">×</button>
                 </div>
               ))}
-              {dayEvents.length > 1 && <div className="text-[8px] text-gray-500 text-center">+{dayEvents.length - 1}</div>}
             </div>
           )
         })}
@@ -163,6 +193,8 @@ function AddEventModal({ date, onSave, onClose }: {
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [eventType, setEventType] = useState<CalendarEventType>('appointment')
+  const [eventTime, setEventTime] = useState('')
+  const [duration, setDuration] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -170,36 +202,56 @@ function AddEventModal({ date, onSave, onClose }: {
     if (!title.trim()) return
     setSaving(true)
     try {
-      const ev = await addCalendarEvent({ event_date: date, title: title.trim(), notes: notes || null, project_id: null, event_type: eventType })
+      const ev = await addCalendarEvent({
+        event_date: date, title: title.trim(), notes: notes || null,
+        project_id: null, event_type: eventType,
+        event_time: eventTime || null,
+        duration_minutes: duration ? parseInt(duration) : null,
+      })
       onSave(ev)
     } finally { setSaving(false) }
   }
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+      <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-white">Add Event — {date}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+          <h3 className="font-semibold text-gray-900">Add Event — {date}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input required placeholder="Event title" value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+            className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
           <select value={eventType} onChange={e => setEventType(e.target.value as CalendarEventType)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+            className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
             <option value="appointment">Appointment</option>
             <option value="reminder">Reminder</option>
             <option value="milestone">Milestone</option>
             <option value="other">Other</option>
           </select>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Time</label>
+              <input type="time" value={eventTime} onChange={e => setEventTime(e.target.value)}
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Duration</label>
+              <select value={duration} onChange={e => setDuration(e.target.value)}
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
+                <option value="">—</option>
+                {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+          </div>
           <textarea placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none resize-none" />
+            className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none resize-none" />
           <div className="flex gap-3">
             <button type="submit" disabled={saving || !title.trim()}
-              className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+              className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">
               {saving ? 'Saving...' : 'Add Event'}
             </button>
-            <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-900">Cancel</button>
           </div>
         </form>
       </div>
@@ -216,6 +268,7 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
 }) {
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
+  const [duration, setDuration] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const label = `${project.customer?.name ?? 'Unknown'} — ${project.project_type?.replace(/_/g, ' ') ?? 'Project'}`
@@ -227,10 +280,12 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
     try {
       const ev = await addCalendarEvent({
         event_date: date,
-        title: `Design Meeting — ${project.customer?.name ?? 'Unknown'}${time ? ` @ ${time}` : ''}`,
+        title: `Design Meeting — ${project.customer?.name ?? 'Unknown'}`,
         notes: notes || null,
         project_id: project.id,
         event_type: 'appointment',
+        event_time: time || null,
+        duration_minutes: duration ? parseInt(duration) : null,
       })
       await updateProject(project.id, { design_meeting_requested: false })
       await addDesignMeetingNote(
@@ -245,33 +300,41 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+      <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-white text-sm">Schedule Design Meeting</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+          <h3 className="font-semibold text-gray-900 text-sm">Schedule Design Meeting</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
         </div>
-        <p className="text-xs text-gray-400">{label}</p>
+        <p className="text-xs text-gray-500">{label}</p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Date *</label>
+              <label className="block text-xs text-gray-500 mb-1">Date *</label>
               <input type="date" required value={date} onChange={e => setDate(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Time</label>
+              <label className="block text-xs text-gray-500 mb-1">Time</label>
               <input type="time" value={time} onChange={e => setTime(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
             </div>
           </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Duration</label>
+            <select value={duration} onChange={e => setDuration(e.target.value)}
+              className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
+              <option value="">—</option>
+              {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+          </div>
           <textarea placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none resize-none" />
+            className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none resize-none" />
           <div className="flex gap-3">
             <button type="submit" disabled={saving || !date}
-              className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+              className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">
               {saving ? 'Scheduling...' : 'Schedule Meeting'}
             </button>
-            <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-900">Cancel</button>
           </div>
         </form>
       </div>
@@ -344,7 +407,7 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+    <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
       {/* Quick-add — always visible above the collapse toggle */}
       <div className="mb-2 space-y-1.5">
         <div className="flex gap-1.5">
@@ -353,12 +416,12 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
             value={quickItem}
             onChange={e => setQuickItem(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleQuickAdd() }}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+            className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <button
             onClick={handleQuickAdd}
             disabled={quickAdding || !quickItem.trim()}
-            className="text-xs bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 font-semibold px-3 py-1.5 rounded-lg shrink-0"
+            className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold px-3 py-1.5 rounded-lg shrink-0"
           >
             {quickAdding ? '...' : 'Add'}
           </button>
@@ -366,7 +429,7 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
         <select
           value={quickProjectId}
           onChange={e => setQuickProjectId(e.target.value)}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-[11px] text-gray-300 focus:outline-none"
+          className="w-full bg-gray-100 border border-gray-300 rounded-lg px-2 py-1 text-[11px] text-gray-700 focus:outline-none"
         >
           <option value="">Link to project (optional)</option>
           {projects.map(p => (
@@ -382,9 +445,9 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
         className="w-full flex items-center justify-between mb-1"
       >
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-200">Shopping List</h2>
+          <h2 className="text-sm font-semibold text-gray-800">Shopping List</h2>
           {items.length > 0 && (
-            <span className="text-xs bg-amber-800 text-amber-200 font-bold px-1.5 py-0.5 rounded-full">{items.length}</span>
+            <span className="text-xs bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-full">{items.length}</span>
           )}
         </div>
         <span className="text-gray-500 text-xs">{collapsed ? '▼' : '▲'}</span>
@@ -393,25 +456,25 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
       {!collapsed && (
         <div className="mt-2">
           {loading ? (
-            <p className="text-xs text-gray-600 py-1">Loading...</p>
+            <p className="text-xs text-gray-400 py-1">Loading...</p>
           ) : items.length === 0 ? (
-            <p className="text-xs text-gray-600 py-1">No unpurchased items.</p>
+            <p className="text-xs text-gray-400 py-1">No unpurchased items.</p>
           ) : (
             <div className="space-y-3">
               {Array.from(byProject.entries()).map(([pid, pidItems]) => {
                 const label = getProjectLabel(pidItems[0])
                 return (
                   <div key={pid}>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 truncate">{label}</p>
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1 truncate">{label}</p>
                     <div className="space-y-0.5">
                       {pidItems.map(item => (
                         <label
                           key={item.id}
-                          className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white group"
+                          className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer hover:text-gray-900 group"
                         >
                           <input
                             type="checkbox"
-                            className="w-3 h-3 rounded border-gray-600 bg-gray-800 accent-amber-500 cursor-pointer"
+                            className="w-3 h-3 rounded border-gray-300 bg-gray-100 accent-blue-600 cursor-pointer"
                             checked={false}
                             onChange={e => handlePurchased(item.id, e as unknown as React.MouseEvent)}
                             disabled={markingId === item.id}
@@ -460,7 +523,7 @@ function ProjectCard({
   const deliveryEnd = p.expected_delivery_end
   const daysLeft = deliveryEnd ? Math.ceil((new Date(deliveryEnd).getTime() - Date.now()) / 86400000) : null
   const deliveryLabel = deliveryEnd ? new Date(deliveryEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
-  const deliveryColor = daysLeft === null ? '' : daysLeft < 0 ? 'bg-red-900 text-red-200' : daysLeft <= 14 ? 'bg-orange-900 text-orange-200' : 'bg-emerald-900 text-emerald-200'
+  const deliveryColor = daysLeft === null ? '' : daysLeft < 0 ? 'bg-red-100 text-red-700' : daysLeft <= 14 ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
 
   const upcomingSteps = p.steps.filter(s => !s.completed && !s.is_current).slice(0, 3)
 
@@ -519,14 +582,14 @@ function ProjectCard({
       onDrop={e => { e.preventDefault(); onDrop(p.id) }}
       onDragEnd={onDragEnd}
       onClick={() => onNavigate(p.id)}
-      className={`relative bg-gray-900 border rounded-xl p-4 cursor-pointer transition-colors select-none ${
-        isDragOver ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-gray-800 hover:border-blue-700'
+      className={`relative bg-white shadow-sm border rounded-xl p-4 cursor-pointer transition-colors select-none ${
+        isDragOver ? 'border-blue-400 ring-1 ring-blue-500/50' : 'border-gray-200 hover:border-blue-300'
       }`}
     >
       {/* Toast */}
       {toast && (
         <div
-          className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-emerald-800 text-emerald-100 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap"
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap"
           onClick={e => e.stopPropagation()}
         >
           ✓ {toast}
@@ -536,13 +599,13 @@ function ProjectCard({
       {/* Top row: drag handle + name + badges */}
       <div className="flex items-start gap-2 mb-3">
         <span
-          className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing mt-0.5 shrink-0 text-base leading-none"
+          className="text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing mt-0.5 shrink-0 text-base leading-none"
           onClick={e => e.stopPropagation()}
           title="Drag to reorder"
         >⠿</span>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-white text-base truncate">{p.customer?.name ?? 'No customer'}</p>
-          <p className="text-sm text-gray-400 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</p>
+          <p className="font-bold text-gray-900 text-base truncate">{p.customer?.name ?? 'No customer'}</p>
+          <p className="text-sm text-gray-500 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1 justify-end shrink-0">
           {deliveryLabel && (
@@ -551,10 +614,10 @@ function ProjectCard({
             </span>
           )}
           {p.openSubtasks > 0 && (
-            <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">{p.openSubtasks} subtasks</span>
+            <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">{p.openSubtasks} subtasks</span>
           )}
           {p.unresolvedQuestions > 0 && (
-            <span className="text-[10px] bg-orange-900 text-orange-200 px-1.5 py-0.5 rounded font-semibold">{p.unresolvedQuestions} Qs</span>
+            <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold">{p.unresolvedQuestions} Qs</span>
           )}
         </div>
       </div>
@@ -569,7 +632,7 @@ function ProjectCard({
               <button
                 key={label}
                 onClick={() => onNavigate(p.id)}
-                className="text-[10px] font-semibold bg-red-950 border border-red-700 text-red-300 px-1.5 py-0.5 rounded-full hover:bg-red-900 transition-colors"
+                className="text-[10px] font-semibold bg-red-50 border border-red-300 text-red-600 px-1.5 py-0.5 rounded-full hover:bg-red-200 transition-colors"
               >
                 ⚠ Missing: {label}
               </button>
@@ -580,14 +643,14 @@ function ProjectCard({
 
       {/* Current Step section */}
       {p.currentStep ? (
-        <div className="bg-blue-950/30 border border-blue-800/60 rounded-lg px-3 py-2 mb-3">
+        <div className="bg-blue-50/30 border border-blue-200/60 rounded-lg px-3 py-2 mb-3">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-semibold text-blue-200 truncate flex-1">{p.currentStep.step_name}</span>
+            <span className="text-sm font-semibold text-blue-700 truncate flex-1">{p.currentStep.step_name}</span>
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase shrink-0 ${
-              p.currentStep.step_type === 'waiting' ? 'bg-orange-900 text-orange-200' : 'bg-emerald-900 text-emerald-200'
+              p.currentStep.step_type === 'waiting' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
             }`}>{p.currentStep.step_type}</span>
             {p.currentStep.waiting_on && (
-              <span className="text-[10px] text-orange-300 shrink-0">({p.currentStep.waiting_on})</span>
+              <span className="text-[10px] text-orange-600 shrink-0">({p.currentStep.waiting_on})</span>
             )}
           </div>
           {p.nextStep && (
@@ -596,14 +659,14 @@ function ProjectCard({
           <button
             onClick={handleCompleteStep}
             disabled={completing}
-            className="w-full text-xs font-semibold bg-emerald-800 hover:bg-emerald-700 disabled:opacity-50 text-emerald-100 py-1.5 rounded-md transition-colors"
+            className="w-full text-xs font-semibold bg-emerald-100 hover:bg-emerald-700 disabled:opacity-50 text-emerald-800 py-1.5 rounded-md transition-colors"
           >
             {completing ? 'Saving...' : '✓ Complete & Advance'}
           </button>
         </div>
       ) : (
-        <div className="bg-red-950/30 border border-red-800/60 rounded-lg px-3 py-2 mb-3">
-          <p className="text-xs text-red-400">No active step — click to set one</p>
+        <div className="bg-red-50/30 border border-red-200/60 rounded-lg px-3 py-2 mb-3">
+          <p className="text-xs text-red-600">No active step — click to set one</p>
         </div>
       )}
 
@@ -613,7 +676,7 @@ function ProjectCard({
           <span>Steps</span>
           <span>{p.stepsCompleted}/{p.steps.length}</span>
         </div>
-        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full bg-blue-500 rounded-full"
             style={{ width: p.steps.length > 0 ? `${(p.stepsCompleted / p.steps.length) * 100}%` : '0%' }} />
         </div>
@@ -626,7 +689,7 @@ function ProjectCard({
           onChange={handleStatusChange}
           onClick={e => e.stopPropagation()}
           disabled={savingStatus}
-          className="text-[10px] font-semibold bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-gray-300 focus:outline-none disabled:opacity-50 cursor-pointer"
+          className="text-[10px] font-semibold bg-gray-100 border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none disabled:opacity-50 cursor-pointer"
         >
           {STATUS_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -634,7 +697,7 @@ function ProjectCard({
         </select>
         <button
           onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
-          className="text-[10px] text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors"
+          className="text-[10px] text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
         >
           {expanded ? '▲ Hide' : '▼ Details'}
         </button>
@@ -643,7 +706,7 @@ function ProjectCard({
       {/* Expandable details */}
       {expanded && (
         <div
-          className="mt-3 pt-3 border-t border-gray-800 grid grid-cols-2 gap-3"
+          className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-2 gap-3"
           onClick={e => e.stopPropagation()}
         >
           {/* Left: Steps Summary */}
@@ -652,14 +715,14 @@ function ProjectCard({
             {upcomingSteps.length > 0 ? (
               <div className="space-y-0.5">
                 {upcomingSteps.map(s => (
-                  <p key={s.id} className="text-[10px] text-gray-400 truncate">· {s.step_name}</p>
+                  <p key={s.id} className="text-[10px] text-gray-500 truncate">· {s.step_name}</p>
                 ))}
               </div>
             ) : (
-              <p className="text-[10px] text-gray-600">No upcoming steps</p>
+              <p className="text-[10px] text-gray-400">No upcoming steps</p>
             )}
             {p.openSubtasks > 0 && (
-              <span className="mt-1.5 inline-block text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-semibold">
+              <span className="mt-1.5 inline-block text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">
                 {p.openSubtasks} open subtasks
               </span>
             )}
@@ -668,10 +731,10 @@ function ProjectCard({
           {/* Right: Materials Summary */}
           <div>
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Materials</p>
-            <p className="text-[10px] text-gray-400">{p.materialsOrdered}/{p.materialsTotal} ordered</p>
-            <p className="text-[10px] text-gray-400">{p.materialsReceived}/{p.materialsTotal} received</p>
+            <p className="text-[10px] text-gray-500">{p.materialsOrdered}/{p.materialsTotal} ordered</p>
+            <p className="text-[10px] text-gray-500">{p.materialsReceived}/{p.materialsTotal} received</p>
             {p.unresolvedQuestions > 0 && (
-              <span className="mt-1.5 inline-block text-[10px] bg-orange-900 text-orange-200 px-1.5 py-0.5 rounded font-semibold">
+              <span className="mt-1.5 inline-block text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold">
                 {p.unresolvedQuestions} open Qs
               </span>
             )}
@@ -713,19 +776,19 @@ function QueueRow({
       onDrop={e => { e.preventDefault(); onDrop(p.id) }}
       onDragEnd={onDragEnd}
       onClick={() => onNavigate(p.id)}
-      className={`bg-gray-900 border rounded-xl px-4 py-3 flex items-center gap-4 cursor-pointer transition-colors ${
-        isDragOver ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-gray-800 hover:border-blue-700'
+      className={`bg-white shadow-sm border rounded-xl px-4 py-3 flex items-center gap-4 cursor-pointer transition-colors ${
+        isDragOver ? 'border-blue-400 ring-1 ring-blue-500/50' : 'border-gray-200 hover:border-blue-300'
       }`}
     >
       <span
-        className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing shrink-0 text-base"
+        className="text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-base"
         onClick={e => e.stopPropagation()}
         title="Drag to reorder"
       >⠿</span>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-white">
+        <p className="font-semibold text-gray-900">
           {p.customer?.name ?? 'No customer'}
-          <span className="text-gray-400 font-normal ml-2 text-sm capitalize">
+          <span className="text-gray-500 font-normal ml-2 text-sm capitalize">
             — {p.project_type?.replace(/_/g, ' ') ?? '—'}
           </span>
         </p>
@@ -736,7 +799,7 @@ function QueueRow({
       </div>
       <button
         onClick={e => { e.stopPropagation(); onStartProduction(p) }}
-        className="text-xs bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+        className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
       >
         Start Production
       </button>
@@ -917,11 +980,11 @@ export default function ShopDashboard() {
           <h1 className="text-2xl font-bold">Shop Dashboard</h1>
           <div className="flex items-center gap-3">
             <Link href="/dashboard/shop/tasks"
-              className="text-sm bg-blue-800 hover:bg-blue-700 text-blue-200 px-4 py-2 rounded-lg transition-colors font-medium">
+              className="text-sm bg-blue-100 hover:bg-blue-700 text-blue-700 px-4 py-2 rounded-lg transition-colors font-medium">
               ✓ Tasks
             </Link>
             <Link href="/dashboard/shop/shopping-list"
-              className="text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-200 px-4 py-2 rounded-lg transition-colors font-medium">
+              className="text-sm bg-emerald-100 hover:bg-emerald-700 text-emerald-700 px-4 py-2 rounded-lg transition-colors font-medium">
               🛒 Shopping List
             </Link>
           </div>
@@ -929,29 +992,29 @@ export default function ShopDashboard() {
 
         {/* Design Meetings Needed Banner */}
         {meetingRequests.length > 0 && (
-          <div className="bg-blue-950/40 border border-blue-800 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-blue-800/60">
+          <div className="bg-blue-50/40 border border-blue-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-blue-200/60">
               <div className="flex items-center gap-2">
-                <span className="text-blue-400 font-semibold text-sm">📐 Design Meetings Needed</span>
-                <span className="bg-blue-800 text-blue-200 text-xs font-bold px-2 py-0.5 rounded-full">{meetingRequests.length}</span>
+                <span className="text-blue-600 font-semibold text-sm">📐 Design Meetings Needed</span>
+                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{meetingRequests.length}</span>
               </div>
-              <button onClick={() => setMeetingsCollapsed(v => !v)} className="text-blue-400 hover:text-blue-300 text-xs">
+              <button onClick={() => setMeetingsCollapsed(v => !v)} className="text-blue-600 hover:text-blue-600 text-xs">
                 {meetingsCollapsed ? 'Show' : 'Hide'}
               </button>
             </div>
             {!meetingsCollapsed && (
-              <div className="divide-y divide-blue-900/40">
+              <div className="divide-y divide-blue-200/40">
                 {meetingRequests.map(p => (
                   <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-blue-200 truncate">
+                      <p className="text-sm font-medium text-blue-700 truncate">
                         {p.customer?.name ?? 'Unknown'} — <span className="capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'Project'}</span>
                       </p>
-                      <p className="text-[10px] text-blue-400/70">Requested {new Date(p.updated_at).toLocaleDateString()}</p>
+                      <p className="text-[10px] text-blue-600/70">Requested {new Date(p.updated_at).toLocaleDateString()}</p>
                     </div>
                     <button
                       onClick={() => setSchedulingProject(p)}
-                      className="text-xs bg-blue-800 hover:bg-blue-700 text-blue-100 font-semibold px-3 py-1.5 rounded-lg shrink-0"
+                      className="text-xs bg-blue-100 hover:bg-blue-700 text-blue-800 font-semibold px-3 py-1.5 rounded-lg shrink-0"
                     >
                       Schedule Meeting
                     </button>
@@ -964,31 +1027,31 @@ export default function ShopDashboard() {
 
         {/* Pending Questions Banner */}
         {pendingQuestions.length > 0 && (
-          <div className="bg-orange-950/40 border border-orange-800 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-orange-800/60">
+          <div className="bg-orange-50/40 border border-orange-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-orange-200/60">
               <div className="flex items-center gap-2">
-                <span className="text-orange-400 font-semibold text-sm">⚠ Pending Questions</span>
-                <span className="bg-orange-800 text-orange-200 text-xs font-bold px-2 py-0.5 rounded-full">{pendingQuestions.length}</span>
+                <span className="text-orange-600 font-semibold text-sm">⚠ Pending Questions</span>
+                <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">{pendingQuestions.length}</span>
               </div>
-              <button onClick={() => setQuestionsCollapsed(v => !v)} className="text-orange-400 hover:text-orange-300 text-xs">
+              <button onClick={() => setQuestionsCollapsed(v => !v)} className="text-orange-600 hover:text-orange-600 text-xs">
                 {questionsCollapsed ? 'Show' : 'Hide'}
               </button>
             </div>
             {!questionsCollapsed && (
-              <div className="divide-y divide-orange-900/40">
+              <div className="divide-y divide-orange-200/40">
                 {Array.from(qByProject.entries()).map(([pid, qs]) => {
                   const proj = projects.find(p => p.id === pid)
                   const label = proj ? `${proj.customer?.name ?? 'Unknown'} — ${proj.project_type?.replace(/_/g, ' ') ?? 'Project'}` : 'Unknown Project'
                   return (
                     <div key={pid} className="px-4 py-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-orange-200">{label}</span>
-                        <Link href={`/dashboard/projects/${pid}?view=shop`} className="text-xs text-amber-400 hover:text-amber-300">Go →</Link>
+                        <span className="text-sm font-medium text-orange-700">{label}</span>
+                        <Link href={`/dashboard/projects/${pid}?view=shop`} className="text-xs text-blue-600 hover:text-blue-500">Go →</Link>
                       </div>
                       <div className="space-y-0.5">
                         {qs.map(q => (
-                          <div key={q.id} className="flex items-center gap-2 text-xs text-orange-100">
-                            <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-900 text-blue-200' : 'bg-gray-700 text-gray-300'}`}>{q.directed_at}</span>
+                          <div key={q.id} className="flex items-center gap-2 text-xs text-orange-800">
+                            <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'}`}>{q.directed_at}</span>
                             <span>{q.question}</span>
                           </div>
                         ))}
@@ -1004,9 +1067,9 @@ export default function ShopDashboard() {
         {/* In Production — 3-column tile grid */}
         {inProduction.length > 0 && (
           <div>
-            <h2 className="font-bold text-white mb-3 flex items-center gap-2">
+            <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               In Production
-              <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{inProduction.length}</span>
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{inProduction.length}</span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {inProduction.map(p => (
@@ -1029,9 +1092,9 @@ export default function ShopDashboard() {
         {/* Ready for Delivery */}
         {readyForDelivery.length > 0 && (
           <div>
-            <h2 className="font-bold text-white mb-3 flex items-center gap-2">
+            <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               Ready for Delivery
-              <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{readyForDelivery.length}</span>
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{readyForDelivery.length}</span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {readyForDelivery.map(p => (
@@ -1054,9 +1117,9 @@ export default function ShopDashboard() {
         {/* Up Next — In Queue */}
         {inQueue.length > 0 && (
           <div>
-            <h2 className="font-bold text-white mb-3 flex items-center gap-2">
+            <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               Up Next — In Queue
-              <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{inQueue.length}</span>
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{inQueue.length}</span>
             </h2>
             <div className="space-y-2">
               {inQueue.map(p => (
@@ -1086,12 +1149,12 @@ export default function ShopDashboard() {
       <div className="w-80 xl:w-96 shrink-0 sticky top-6 space-y-4 max-h-[calc(100vh-80px)] overflow-y-auto">
 
         {/* Calendar section (~50%) */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+        <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-gray-200">Calendar</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Calendar</h2>
             <button onClick={() => setAddingEventDate(
               `${calYear}-${String(calMonth).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`
-            )} className="text-xs text-amber-400 hover:text-amber-300">+ Add Event</button>
+            )} className="text-xs text-blue-600 hover:text-blue-500">+ Add Event</button>
           </div>
           <MiniCalendar
             events={events}
@@ -1103,16 +1166,17 @@ export default function ShopDashboard() {
               await deleteCalendarEvent(id).catch(console.error)
               setEvents(prev => prev.filter(e => e.id !== id))
             }}
+            projectNames={new Map(projects.map(p => [p.id, `${p.customer?.name ?? 'Unknown'} — ${p.project_type?.replace(/_/g, ' ') ?? 'Project'}`]))}
           />
           {events.length > 0 && (
             <div className="mt-2 space-y-1">
               {events.slice(0, 4).map(ev => (
                 <div key={ev.id} className="flex items-center gap-2 text-xs">
                   <span className="text-gray-500 shrink-0 w-10">{ev.event_date.slice(5).replace('-', '/')}</span>
-                  <span className="text-gray-300 truncate flex-1">{ev.title}</span>
+                  <span className="text-gray-700 truncate flex-1">{ev.title}{ev.event_time ? ` — ${formatEventTime(ev.event_time)}` : ''}</span>
                 </div>
               ))}
-              {events.length > 4 && <p className="text-[10px] text-gray-600">+{events.length - 4} more this month</p>}
+              {events.length > 4 && <p className="text-[10px] text-gray-400">+{events.length - 4} more this month</p>}
             </div>
           )}
         </div>
@@ -1149,17 +1213,17 @@ export default function ShopDashboard() {
           }
 
           return (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+            <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-gray-200">
+                <h2 className="text-sm font-semibold text-gray-800">
                   Today&apos;s Tasks
                   {totalItems > 0 && <span className="ml-1.5 text-xs text-gray-500">({totalItems})</span>}
                 </h2>
-                <Link href="/dashboard/shop/tasks" className="text-xs text-amber-400 hover:text-amber-300">See all →</Link>
+                <Link href="/dashboard/shop/tasks" className="text-xs text-blue-600 hover:text-blue-500">See all →</Link>
               </div>
 
               {totalItems === 0 ? (
-                <p className="text-xs text-gray-600 py-2">All clear — no open action items.</p>
+                <p className="text-xs text-gray-400 py-2">All clear — no open action items.</p>
               ) : (
                 <div className="space-y-3">
                   {/* Open sub-tasks */}
@@ -1167,24 +1231,24 @@ export default function ShopDashboard() {
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Sub-Tasks</span>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Sub-Tasks</span>
                       </div>
                       <div className="space-y-0.5">
                         {openSubtaskItems.map(({ t, st }) => (
-                          <div key={st.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 group">
+                          <div key={st.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 group">
                             <input
                               type="checkbox"
                               checked={false}
                               disabled={completingSubtaskId === st.id}
                               onChange={() => handleCompleteSubtask(st.id, t.currentStep.id)}
-                              className="mt-0.5 w-3 h-3 rounded border-gray-600 bg-gray-800 accent-emerald-500 cursor-pointer shrink-0"
+                              className="mt-0.5 w-3 h-3 rounded border-gray-300 bg-gray-100 accent-emerald-500 cursor-pointer shrink-0"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className={`text-xs font-medium text-white truncate ${completingSubtaskId === st.id ? 'opacity-50' : ''}`}>{st.description}</p>
+                              <p className={`text-xs font-medium text-gray-900 truncate ${completingSubtaskId === st.id ? 'opacity-50' : ''}`}>{st.description}</p>
                               <p className="text-[10px] text-gray-500 truncate">{projectLabelFor(t.project)}</p>
                             </div>
                             <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
-                              className="text-gray-600 hover:text-amber-400 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</Link>
+                              className="text-gray-400 hover:text-blue-600 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</Link>
                           </div>
                         ))}
                       </div>
@@ -1196,19 +1260,19 @@ export default function ShopDashboard() {
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Open Questions</span>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Open Questions</span>
                       </div>
                       <div className="space-y-0.5">
                         {pendingQuestions.map(q => (
-                          <div key={q.id} className="px-2 py-1.5 rounded-lg hover:bg-gray-800">
+                          <div key={q.id} className="px-2 py-1.5 rounded-lg hover:bg-blue-50">
                             <div className="flex items-start gap-2">
-                              <span className={`shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-900 text-blue-200' : 'bg-gray-700 text-gray-300'}`}>{q.directed_at}</span>
+                              <span className={`shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'}`}>{q.directed_at}</span>
                               <div className="min-w-0 flex-1">
-                                <p className="text-xs text-white">{q.question}</p>
+                                <p className="text-xs text-gray-900">{q.question}</p>
                                 <p className="text-[10px] text-gray-500 truncate">{q.project ? projectLabelFor(q.project) : 'Unknown Project'}</p>
                               </div>
                               <Link href={`/dashboard/projects/${q.project_id}?view=shop`}
-                                className="text-gray-600 hover:text-amber-400 text-xs shrink-0">→</Link>
+                                className="text-gray-400 hover:text-blue-600 text-xs shrink-0">→</Link>
                             </div>
                           </div>
                         ))}
@@ -1221,12 +1285,12 @@ export default function ShopDashboard() {
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Missing Info</span>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Missing Info</span>
                       </div>
                       <div className="space-y-0.5">
                         {missingInfo.flatMap(({ p, alerts }) => alerts.map(label => (
                           <Link key={`${p.id}-${label}`} href={`/dashboard/projects/${p.id}?view=shop`}
-                            className="block px-2 py-1.5 rounded-lg hover:bg-gray-800 text-xs text-red-300">
+                            className="block px-2 py-1.5 rounded-lg hover:bg-blue-50 text-xs text-red-600">
                             ⚠ {p.customer?.name ?? 'Unknown'} — Missing: {label}
                           </Link>
                         )))}
@@ -1239,12 +1303,12 @@ export default function ShopDashboard() {
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Urgent Touch-Ups</span>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Urgent Touch-Ups</span>
                       </div>
                       <div className="space-y-0.5">
                         {urgentTouchups.map(t => (
-                          <div key={t.id} className="px-2 py-1.5 rounded-lg hover:bg-gray-800">
-                            <p className="text-xs font-medium text-white truncate">{t.description}</p>
+                          <div key={t.id} className="px-2 py-1.5 rounded-lg hover:bg-blue-50">
+                            <p className="text-xs font-medium text-gray-900 truncate">{t.description}</p>
                             <p className="text-[10px] text-gray-500">
                               {t.assigned_to ? `→ ${t.assigned_to} · ` : ''}{daysSince(t.created_at)}d old
                             </p>

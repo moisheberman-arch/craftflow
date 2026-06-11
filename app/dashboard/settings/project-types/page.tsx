@@ -76,44 +76,44 @@ function FieldEditor({
   }
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3 mt-2">
+    <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 space-y-3 mt-2">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-400 block mb-1">Field Label *</label>
+          <label className="text-xs text-gray-500 block mb-1">Field Label *</label>
           <input value={label} onChange={e => handleLabelChange(e.target.value)}
             placeholder="e.g. Does the customer want leaves?"
-            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none" />
+            className="w-full bg-gray-200 border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:outline-none" />
         </div>
         <div>
-          <label className="text-xs text-gray-400 block mb-1">Field Key *</label>
+          <label className="text-xs text-gray-500 block mb-1">Field Key *</label>
           <input value={key} onChange={e => setKey(e.target.value)}
             placeholder="e.g. wants_leaves"
-            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none font-mono" />
+            className="w-full bg-gray-200 border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:outline-none font-mono" />
         </div>
       </div>
       <div className="flex items-center gap-4">
         <div>
-          <label className="text-xs text-gray-400 block mb-1">Field Type</label>
+          <label className="text-xs text-gray-500 block mb-1">Field Type</label>
           <select value={type} onChange={e => setType(e.target.value as ProjectTypeFieldType)}
-            className="bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none">
+            className="bg-gray-200 border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:outline-none">
             {(Object.entries(FIELD_TYPE_LABELS) as [ProjectTypeFieldType, string][]).map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
           </select>
         </div>
         <label className="flex items-center gap-2 cursor-pointer mt-4">
-          <input type="checkbox" checked={affectsPrice} onChange={e => setAffectsPrice(e.target.checked)} className="accent-amber-500" />
-          <span className="text-sm text-gray-300">Affects Price ($)</span>
+          <input type="checkbox" checked={affectsPrice} onChange={e => setAffectsPrice(e.target.checked)} className="accent-blue-600" />
+          <span className="text-sm text-gray-700">Affects Price ($)</span>
         </label>
       </div>
       {type === 'dropdown' && (
         <div>
-          <label className="text-xs text-gray-400 block mb-1">Options</label>
+          <label className="text-xs text-gray-500 block mb-1">Options</label>
           <div className="flex flex-wrap gap-1.5 mb-2">
             {options.map((opt, i) => (
-              <span key={i} className="bg-gray-700 text-gray-200 text-xs px-2 py-0.5 rounded flex items-center gap-1">
+              <span key={i} className="bg-gray-200 text-gray-800 text-xs px-2 py-0.5 rounded flex items-center gap-1">
                 {opt}
-                <button onClick={() => setOptions(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300 text-xs">×</button>
+                <button onClick={() => setOptions(prev => prev.filter((_, j) => j !== i))} className="text-red-600 hover:text-red-600 text-xs">×</button>
               </span>
             ))}
           </div>
@@ -121,18 +121,18 @@ function FieldEditor({
             <input value={optInput} onChange={e => setOptInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && optInput.trim()) { setOptions(p => [...p, optInput.trim()]); setOptInput('') } }}
               placeholder='Add option, press Enter'
-              className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none" />
+              className="flex-1 bg-gray-200 border border-gray-300 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none" />
             <button type="button" onClick={() => { if (optInput.trim()) { setOptions(p => [...p, optInput.trim()]); setOptInput('') } }}
-              className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Add</button>
+              className="bg-gray-300 hover:bg-gray-500 text-gray-900 px-2 py-1 rounded text-xs">Add</button>
           </div>
         </div>
       )}
       <div className="flex gap-2 pt-1">
         <button onClick={handleSave} disabled={saving || !label.trim() || !key.trim()}
-          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-1.5 rounded text-sm">
+          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-4 py-1.5 rounded text-sm">
           {saving ? 'Saving...' : initial ? 'Save Changes' : 'Add Field'}
         </button>
-        <button onClick={onCancel} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+        <button onClick={onCancel} className="text-gray-500 hover:text-gray-900 text-sm px-3">Cancel</button>
       </div>
     </div>
   )
@@ -232,7 +232,7 @@ export default function ProjectTypesPage() {
       {/* Sidebar */}
       <div className="w-48 shrink-0">
         <div className="flex items-center gap-2 mb-4">
-          <Link href="/dashboard/settings/pricing" className="text-gray-500 hover:text-gray-300 text-xs">← Pricing</Link>
+          <Link href="/dashboard/settings/pricing" className="text-gray-500 hover:text-gray-700 text-xs">← Pricing</Link>
         </div>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Project Types</h2>
         <div className="space-y-0.5">
@@ -243,11 +243,11 @@ export default function ProjectTypesPage() {
                 key={pt}
                 onClick={() => { setSelectedType(pt); setShowAdd(false); setEditingId(null) }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${
-                  selectedType === pt ? 'bg-amber-500 text-gray-950 font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  selectedType === pt ? 'bg-blue-600 text-white font-semibold' : 'text-gray-500 hover:text-gray-900 hover:bg-blue-50'
                 }`}
               >
                 {PT_LABELS[pt]}
-                <span className={`text-[10px] ${selectedType === pt ? 'text-gray-700' : 'text-gray-600'}`}>{count}</span>
+                <span className={`text-[10px] ${selectedType === pt ? 'text-gray-700' : 'text-gray-400'}`}>{count}</span>
               </button>
             )
           })}
@@ -255,18 +255,18 @@ export default function ProjectTypesPage() {
 
         {customTypes.length > 0 && (
           <div className="mt-3">
-            <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1 px-1">Custom Types</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">Custom Types</p>
             <div className="space-y-0.5">
               {customTypes.map(ct => (
                 <div key={ct.id} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${!ct.is_active ? 'opacity-40' : ''}`}>
-                  <span className="text-gray-300 truncate flex-1">{ct.name}</span>
+                  <span className="text-gray-700 truncate flex-1">{ct.name}</span>
                   <div className="flex gap-1 ml-1">
                     <button onClick={() => handleToggleCustomType(ct)}
-                      className={`text-[9px] px-1 py-0.5 rounded font-semibold ${ct.is_active ? 'bg-emerald-900 text-emerald-300' : 'bg-gray-700 text-gray-500'}`}>
+                      className={`text-[9px] px-1 py-0.5 rounded font-semibold ${ct.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-200 text-gray-500'}`}>
                       {ct.is_active ? 'On' : 'Off'}
                     </button>
                     <button onClick={() => handleDeleteCustomType(ct.id)}
-                      className="text-[9px] text-red-400 hover:text-red-300">×</button>
+                      className="text-[9px] text-red-600 hover:text-red-600">×</button>
                   </div>
                 </div>
               ))}
@@ -282,21 +282,21 @@ export default function ProjectTypesPage() {
                 placeholder="Type name (e.g. Murphy Bed)"
                 value={newTypeName}
                 onChange={e => setNewTypeName(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none"
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-900 focus:outline-none"
               />
               <div className="flex gap-1.5">
                 <button type="submit" disabled={savingNewType || !newTypeName.trim()}
-                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold text-xs py-1.5 rounded-lg">
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs py-1.5 rounded-lg">
                   {savingNewType ? '...' : 'Add'}
                 </button>
                 <button type="button" onClick={() => { setShowNewType(false); setNewTypeName('') }}
-                  className="text-gray-400 hover:text-white text-xs px-2">Cancel</button>
+                  className="text-gray-500 hover:text-gray-900 text-xs px-2">Cancel</button>
               </div>
             </form>
           ) : (
             <button
               onClick={() => setShowNewType(true)}
-              className="w-full text-left text-xs text-amber-400 hover:text-amber-300 px-1 py-1"
+              className="w-full text-left text-xs text-blue-600 hover:text-blue-500 px-1 py-1"
             >
               + New Project Type
             </button>
@@ -307,9 +307,9 @@ export default function ProjectTypesPage() {
       {/* Right panel */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-white">{PT_LABELS[selectedType]} Fields</h1>
+          <h1 className="text-xl font-bold text-gray-900">{PT_LABELS[selectedType]} Fields</h1>
           <button onClick={() => { setShowAdd(true); setEditingId(null) }}
-            className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg">
+            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-4 py-2 rounded-lg">
             + Add Field
           </button>
         </div>
@@ -339,31 +339,31 @@ export default function ProjectTypesPage() {
                   onDragOver={e => { e.preventDefault(); setDragOver(field.id) }}
                   onDrop={() => handleDrop(field.id)}
                   onDragEnd={() => { setDragId(null); setDragOver(null) }}
-                  className={`bg-gray-900 border rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${
-                    dragOver === field.id ? 'border-amber-500' : 'border-gray-800'
+                  className={`bg-white shadow-sm border rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${
+                    dragOver === field.id ? 'border-blue-400' : 'border-gray-200'
                   } ${dragId === field.id ? 'opacity-50' : ''} ${!field.is_active ? 'opacity-50' : ''}`}
                 >
-                  <span className="text-gray-600 cursor-grab select-none">⠿</span>
+                  <span className="text-gray-400 cursor-grab select-none">⠿</span>
                   <span className="text-gray-500 text-xs w-5 text-right shrink-0">{field.sequence_order}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white">{field.field_label}</p>
-                    <p className="text-[10px] text-gray-600 font-mono">{field.field_key}</p>
+                    <p className="text-sm font-medium text-gray-900">{field.field_label}</p>
+                    <p className="text-[10px] text-gray-400 font-mono">{field.field_key}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded uppercase">{field.field_type.replace('_', '/')}</span>
-                    {field.affects_price && <span className="text-[10px] font-semibold bg-amber-900 text-amber-200 px-1.5 py-0.5 rounded">$ Price</span>}
-                    <button onClick={() => handleToggleActive(field)} className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${field.is_active ? 'bg-emerald-900 text-emerald-200' : 'bg-gray-700 text-gray-400'}`}>
+                    <span className="text-[10px] font-semibold bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded uppercase">{field.field_type.replace('_', '/')}</span>
+                    {field.affects_price && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">$ Price</span>}
+                    <button onClick={() => handleToggleActive(field)} className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${field.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
                       {field.is_active ? 'Active' : 'Off'}
                     </button>
-                    <button onClick={() => setEditingId(field.id)} className="text-xs text-gray-400 hover:text-white">Edit</button>
-                    <button onClick={() => handleDelete(field.id)} className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                    <button onClick={() => setEditingId(field.id)} className="text-xs text-gray-500 hover:text-gray-900">Edit</button>
+                    <button onClick={() => handleDelete(field.id)} className="text-xs text-red-600 hover:text-red-600">Delete</button>
                   </div>
                 </div>
               )}
             </div>
           ))}
           {fieldsForType.length === 0 && !showAdd && (
-            <div className="text-center py-8 text-gray-600 text-sm">No fields for {PT_LABELS[selectedType]} yet. Click "+ Add Field" to create one.</div>
+            <div className="text-center py-8 text-gray-400 text-sm">No fields for {PT_LABELS[selectedType]} yet. Click "+ Add Field" to create one.</div>
           )}
         </div>
       </div>

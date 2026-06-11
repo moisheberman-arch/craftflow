@@ -19,16 +19,16 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
 }
 
 const STATUS_COLORS: Record<ProjectStatus, string> = {
-  lead:                     'bg-gray-700 text-gray-200',
-  tentative_quote_sent:     'bg-slate-700 text-slate-200',
-  design_meeting_scheduled: 'bg-blue-900 text-blue-200',
-  post_design_meeting:      'bg-indigo-900 text-indigo-200',
-  rendering_in_progress:    'bg-purple-900 text-purple-200',
-  final_quote_issued:       'bg-yellow-900 text-yellow-200',
-  deposit_received:         'bg-green-900 text-green-200',
-  in_production:            'bg-orange-900 text-orange-200',
-  ready_for_delivery:       'bg-teal-900 text-teal-200',
-  completed:                'bg-emerald-900 text-emerald-200',
+  lead:                     'bg-gray-200 text-gray-800',
+  tentative_quote_sent:     'bg-slate-700 text-slate-700',
+  design_meeting_scheduled: 'bg-blue-100 text-blue-700',
+  post_design_meeting:      'bg-indigo-100 text-indigo-700',
+  rendering_in_progress:    'bg-purple-100 text-purple-700',
+  final_quote_issued:       'bg-yellow-100 text-yellow-700',
+  deposit_received:         'bg-green-100 text-green-700',
+  in_production:            'bg-orange-100 text-orange-700',
+  ready_for_delivery:       'bg-teal-100 text-teal-700',
+  completed:                'bg-emerald-100 text-emerald-700',
 }
 
 export default function ManageProjectsPage() {
@@ -109,8 +109,8 @@ export default function ManageProjectsPage() {
     <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard/sales" className="text-gray-500 hover:text-gray-300 text-sm">← Back</Link>
-          <h1 className="text-xl font-bold text-white">Manage Projects</h1>
+          <Link href="/dashboard/sales" className="text-gray-500 hover:text-gray-700 text-sm">← Back</Link>
+          <h1 className="text-xl font-bold text-gray-900">Manage Projects</h1>
         </div>
         {selectedCount > 0 && (
           <button
@@ -128,15 +128,15 @@ export default function ManageProjectsPage() {
           placeholder="Search by customer name..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1 min-w-[200px] bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className="flex-1 min-w-[200px] bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+          className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
           <option value="">All types</option>
           {projectTypes.map(t => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+          className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
           <option value="">All statuses</option>
           {(Object.keys(STATUS_LABELS) as ProjectStatus[]).map(s => (
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
@@ -148,13 +148,13 @@ export default function ManageProjectsPage() {
       {loading ? (
         <div className="text-center py-8 text-gray-500">Loading...</div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
+              <tr className="border-b border-gray-200">
                 <th className="px-3 py-2.5 w-10">
                   <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll}
-                    className="accent-amber-500 w-4 h-4 cursor-pointer" />
+                    className="accent-blue-600 w-4 h-4 cursor-pointer" />
                 </th>
                 {['Customer', 'Type', 'Status', 'Created', ''].map((h, i) => (
                   <th key={i} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
@@ -165,13 +165,13 @@ export default function ManageProjectsPage() {
               {filtered.length === 0 ? (
                 <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-500">No projects match.</td></tr>
               ) : filtered.map(p => (
-                <tr key={p.id} className={`border-b border-gray-800 last:border-0 ${selected.has(p.id) ? 'bg-red-950/10' : ''}`}>
+                <tr key={p.id} className={`border-b border-gray-200 last:border-0 ${selected.has(p.id) ? 'bg-red-50/10' : ''}`}>
                   <td className="px-3 py-3">
                     <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
-                      className="accent-amber-500 w-4 h-4 cursor-pointer" />
+                      className="accent-blue-600 w-4 h-4 cursor-pointer" />
                   </td>
-                  <td className="px-3 py-3 text-white font-medium">{p.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}</td>
-                  <td className="px-3 py-3 text-gray-300 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</td>
+                  <td className="px-3 py-3 text-gray-900 font-medium">{p.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}</td>
+                  <td className="px-3 py-3 text-gray-700 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</td>
                   <td className="px-3 py-3">
                     {p.status ? (
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[p.status]}`}>
@@ -179,10 +179,10 @@ export default function ManageProjectsPage() {
                       </span>
                     ) : '—'}
                   </td>
-                  <td className="px-3 py-3 text-gray-400">{new Date(p.created_at).toLocaleDateString()}</td>
+                  <td className="px-3 py-3 text-gray-500">{new Date(p.created_at).toLocaleDateString()}</td>
                   <td className="px-3 py-3 text-right">
                     <button onClick={() => setConfirmIds([p.id])}
-                      className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                      className="text-xs text-red-600 hover:text-red-600">Delete</button>
                   </td>
                 </tr>
               ))}
@@ -194,9 +194,9 @@ export default function ManageProjectsPage() {
       {/* Confirmation modal */}
       {confirmIds && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <h3 className="font-semibold text-white">Delete {confirmIds.length} project{confirmIds.length === 1 ? '' : 's'}?</h3>
-            <p className="text-sm text-gray-400">
+          <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+            <h3 className="font-semibold text-gray-900">Delete {confirmIds.length} project{confirmIds.length === 1 ? '' : 's'}?</h3>
+            <p className="text-sm text-gray-500">
               You are about to delete {confirmIds.length} project{confirmIds.length === 1 ? '' : 's'}. This cannot be undone.
               All related materials, steps, quotes, and files will also be deleted.
             </p>
@@ -206,7 +206,7 @@ export default function ManageProjectsPage() {
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
               <button onClick={() => setConfirmIds(null)} disabled={deleting}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900">Cancel</button>
             </div>
           </div>
         </div>

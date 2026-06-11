@@ -34,10 +34,10 @@ function InlineEditCell({
   if (!editing) {
     return (
       <span
-        className={`cursor-pointer hover:text-amber-400 transition-colors ${className}`}
+        className={`cursor-pointer hover:text-blue-600 transition-colors ${className}`}
         onClick={() => { setLocal(value); setEditing(true) }}
       >
-        {value || <span className="text-gray-600 italic">—</span>}
+        {value || <span className="text-gray-400 italic">—</span>}
       </span>
     )
   }
@@ -49,7 +49,7 @@ function InlineEditCell({
       onChange={e => setLocal(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
-      className="bg-gray-800 border border-amber-500 rounded px-2 py-0.5 text-sm text-white w-full focus:outline-none"
+      className="bg-gray-100 border border-blue-400 rounded px-2 py-0.5 text-sm text-gray-900 w-full focus:outline-none"
     />
   )
 }
@@ -67,7 +67,7 @@ function InlineSelectCell({
     <select
       value={value}
       onChange={e => onSave(e.target.value)}
-      className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:border-amber-500"
+      className="bg-gray-100 border border-gray-300 rounded px-2 py-0.5 text-sm text-gray-900 focus:outline-none focus:border-blue-400"
     >
       <option value="">—</option>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -182,13 +182,13 @@ export default function PricingConfigPage() {
     <div className="max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Pricing Configuration</h1>
 
-      <div className="flex gap-1 mb-6 border-b border-gray-800">
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
         {(['materials', 'addons'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-              tab === t ? 'border-amber-500 text-amber-400' : 'border-transparent text-gray-400 hover:text-white'
+              tab === t ? 'border-blue-400 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'
             }`}
           >
             {t === 'materials' ? 'Materials' : 'Add-Ons & Features'}
@@ -200,65 +200,65 @@ export default function PricingConfigPage() {
       {tab === 'materials' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <p className="text-sm text-gray-400">Click any cell to edit inline. Changes save immediately.</p>
+            <p className="text-sm text-gray-500">Click any cell to edit inline. Changes save immediately.</p>
             <button
               onClick={() => setShowAddMat(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg text-sm"
             >
               + Add Material
             </button>
           </div>
 
           {showAddMat && (
-            <form onSubmit={handleAddMat} className="bg-gray-900 border border-amber-500/40 rounded-xl p-4 space-y-3">
-              <h3 className="text-sm font-medium text-gray-300">New Material</h3>
+            <form onSubmit={handleAddMat} className="bg-white shadow-sm border border-blue-400/40 rounded-xl p-4 space-y-3">
+              <h3 className="text-sm font-medium text-gray-700">New Material</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <input required placeholder="Name *" value={matName} onChange={e => setMatName(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 <select value={matCategory} onChange={e => setMatCategory(e.target.value as MaterialCategory)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500">
                   <option value="">Category</option>
                   {MATERIAL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={matUnit} onChange={e => setMatUnit(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500">
                   <option value="">Unit</option>
                   {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
                 <input type="number" placeholder="Unit Price" value={matUnitPrice} onChange={e => setMatUnitPrice(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 <input type="number" placeholder="Typical Flat Rate" value={matFlat} onChange={e => setMatFlat(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 <input placeholder="Notes" value={matNotes} onChange={e => setMatNotes(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
               </div>
-              {matError && <p className="text-red-400 text-xs">{matError}</p>}
+              {matError && <p className="text-red-600 text-xs">{matError}</p>}
               <div className="flex gap-2">
                 <button type="submit" disabled={savingMat || !matName}
-                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg text-sm">
                   {savingMat ? 'Saving...' : 'Add Material'}
                 </button>
-                <button type="button" onClick={() => { setShowAddMat(false); setMatError('') }} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+                <button type="button" onClick={() => { setShowAddMat(false); setMatError('') }} className="text-gray-500 hover:text-gray-900 text-sm px-3">Cancel</button>
               </div>
             </form>
           )}
 
-          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
+          <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-left">
-                  <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Category</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Unit</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Unit Price</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Flat Rate</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Notes</th>
+                <tr className="border-b border-gray-200 text-left">
+                  <th className="px-4 py-3 text-gray-500 font-medium">Name</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Category</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Unit</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Unit Price</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Flat Rate</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Notes</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {materials.map(m => (
-                  <tr key={m.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/30">
+                  <tr key={m.id} className="border-b border-gray-200 last:border-0 hover:bg-blue-50/30">
                     <td className="px-4 py-3">
                       <InlineEditCell value={m.name} onSave={v => saveMat(m.id, { name: v })} />
                     </td>
@@ -292,11 +292,11 @@ export default function PricingConfigPage() {
                         className="font-mono"
                       />
                     </td>
-                    <td className="px-4 py-3 text-gray-400">
+                    <td className="px-4 py-3 text-gray-500">
                       <InlineEditCell value={m.notes ?? ''} onSave={v => saveMat(m.id, { notes: v || null })} />
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => handleDeleteMat(m.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
+                      <button onClick={() => handleDeleteMat(m.id)} className="text-red-600 hover:text-red-600 text-xs">Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -310,59 +310,59 @@ export default function PricingConfigPage() {
       {tab === 'addons' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <p className="text-sm text-gray-400">Click any cell to edit inline. Changes save immediately.</p>
+            <p className="text-sm text-gray-500">Click any cell to edit inline. Changes save immediately.</p>
             <button
               onClick={() => setShowAddAddon(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg text-sm"
             >
               + Add Feature
             </button>
           </div>
 
           {showAddAddon && (
-            <form onSubmit={handleAddAddon} className="bg-gray-900 border border-amber-500/40 rounded-xl p-4 space-y-3">
-              <h3 className="text-sm font-medium text-gray-300">New Add-On / Feature</h3>
+            <form onSubmit={handleAddAddon} className="bg-white shadow-sm border border-blue-400/40 rounded-xl p-4 space-y-3">
+              <h3 className="text-sm font-medium text-gray-700">New Add-On / Feature</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <input required placeholder="Name *" value={addonName} onChange={e => setAddonName(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 <select value={addonUnit} onChange={e => setAddonUnit(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500">
                   <option value="">Unit</option>
                   {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
                 <input type="number" placeholder="Unit Price" value={addonUnitPrice} onChange={e => setAddonUnitPrice(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 <input type="number" placeholder="Typical Flat Rate" value={addonFlat} onChange={e => setAddonFlat(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 <input placeholder="Notes" value={addonNotes} onChange={e => setAddonNotes(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500 col-span-2" />
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 col-span-2" />
               </div>
-              {addonError && <p className="text-red-400 text-xs">{addonError}</p>}
+              {addonError && <p className="text-red-600 text-xs">{addonError}</p>}
               <div className="flex gap-2">
                 <button type="submit" disabled={savingAddon || !addonName}
-                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-4 py-2 rounded-lg text-sm">
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg text-sm">
                   {savingAddon ? 'Saving...' : 'Add Feature'}
                 </button>
-                <button type="button" onClick={() => { setShowAddAddon(false); setAddonError('') }} className="text-gray-400 hover:text-white text-sm px-3">Cancel</button>
+                <button type="button" onClick={() => { setShowAddAddon(false); setAddonError('') }} className="text-gray-500 hover:text-gray-900 text-sm px-3">Cancel</button>
               </div>
             </form>
           )}
 
-          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
+          <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-left">
-                  <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Unit</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Unit Price</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Typical Flat Rate</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Notes</th>
+                <tr className="border-b border-gray-200 text-left">
+                  <th className="px-4 py-3 text-gray-500 font-medium">Name</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Unit</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Unit Price</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Typical Flat Rate</th>
+                  <th className="px-4 py-3 text-gray-500 font-medium">Notes</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {addons.map(a => (
-                  <tr key={a.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/30">
+                  <tr key={a.id} className="border-b border-gray-200 last:border-0 hover:bg-blue-50/30">
                     <td className="px-4 py-3">
                       <InlineEditCell value={a.name} onSave={v => saveAddon(a.id, { name: v })} />
                     </td>
@@ -385,11 +385,11 @@ export default function PricingConfigPage() {
                         className="font-mono"
                       />
                     </td>
-                    <td className="px-4 py-3 text-gray-400">
+                    <td className="px-4 py-3 text-gray-500">
                       <InlineEditCell value={a.notes ?? ''} onSave={v => saveAddon(a.id, { notes: v || null })} />
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => handleDeleteAddon(a.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
+                      <button onClick={() => handleDeleteAddon(a.id)} className="text-red-600 hover:text-red-600 text-xs">Delete</button>
                     </td>
                   </tr>
                 ))}

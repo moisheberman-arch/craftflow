@@ -55,16 +55,16 @@ const PROJECT_TYPES: ProjectType[] = ['dining_table', 'built_in', 'bookcase', 'b
 
 // Badge colours per status (used in dropdown styling)
 const STATUS_COLORS: Record<ProjectStatus, string> = {
-  lead:                     'bg-gray-700 text-gray-200',
-  tentative_quote_sent:     'bg-slate-700 text-slate-200',
-  design_meeting_scheduled: 'bg-blue-900 text-blue-200',
-  post_design_meeting:      'bg-indigo-900 text-indigo-200',
-  rendering_in_progress:    'bg-purple-900 text-purple-200',
-  final_quote_issued:       'bg-yellow-900 text-yellow-200',
-  deposit_received:         'bg-green-900 text-green-200',
-  in_production:            'bg-orange-900 text-orange-200',
-  ready_for_delivery:       'bg-teal-900 text-teal-200',
-  completed:                'bg-emerald-900 text-emerald-200',
+  lead:                     'bg-gray-200 text-gray-800',
+  tentative_quote_sent:     'bg-slate-700 text-slate-700',
+  design_meeting_scheduled: 'bg-blue-100 text-blue-700',
+  post_design_meeting:      'bg-indigo-100 text-indigo-700',
+  rendering_in_progress:    'bg-purple-100 text-purple-700',
+  final_quote_issued:       'bg-yellow-100 text-yellow-700',
+  deposit_received:         'bg-green-100 text-green-700',
+  in_production:            'bg-orange-100 text-orange-700',
+  ready_for_delivery:       'bg-teal-100 text-teal-700',
+  completed:                'bg-emerald-100 text-emerald-700',
 }
 
 // ── Customers Modal ────────────────────────────────────────────────────────
@@ -180,14 +180,14 @@ function CustomersModal({
       className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
+      <div className="bg-white shadow-sm border border-gray-200 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-3">
             {state !== 'list' && (
-              <button onClick={() => setState('list')} className="text-gray-400 hover:text-white text-sm">← Back</button>
+              <button onClick={() => setState('list')} className="text-gray-500 hover:text-gray-900 text-sm">← Back</button>
             )}
-            <h2 className="font-semibold text-white">
+            <h2 className="font-semibold text-gray-900">
               {state === 'list' && 'Customers'}
               {state === 'detail' && selectedCustomer?.name}
               {state === 'form' && (editingId ? 'Edit Customer' : 'New Customer')}
@@ -196,15 +196,15 @@ function CustomersModal({
           <div className="flex items-center gap-3">
             {state === 'list' && (
               <button onClick={openNew}
-                className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-3 py-1.5 rounded-lg text-sm">
+                className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3 py-1.5 rounded-lg text-sm">
                 + New Customer
               </button>
             )}
             {state === 'detail' && (
               <button onClick={() => selectedCustomer && openEdit(selectedCustomer)}
-                className="text-sm text-amber-400 hover:text-amber-300">Edit</button>
+                className="text-sm text-blue-600 hover:text-blue-500">Edit</button>
             )}
-            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
           </div>
         </div>
 
@@ -213,7 +213,7 @@ function CustomersModal({
           {state === 'list' && (
             <div className="p-4">
               <input placeholder="Search customers..." value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 mb-4 focus:outline-none focus:ring-1 focus:ring-blue-500" />
               {loading ? (
                 <div className="text-center py-8 text-gray-500">Loading...</div>
               ) : filtered.length === 0 ? (
@@ -222,28 +222,28 @@ function CustomersModal({
                 /* Fix 2: Use divs instead of table so row clicks are completely reliable */
                 <div className="space-y-0.5">
                   {/* Header row */}
-                  <div className="grid grid-cols-[1fr_120px_160px_80px] px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-800">
+                  <div className="grid grid-cols-[1fr_120px_160px_80px] px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-200">
                     <span>Name</span><span>Phone</span><span>Email</span><span className="text-right">Actions</span>
                   </div>
                   {filtered.map(c => (
                     <div
                       key={c.id}
-                      className="grid grid-cols-[1fr_120px_160px_80px] items-center px-3 py-3 rounded-lg hover:bg-gray-800/60 cursor-pointer border-b border-gray-800/50 last:border-0 group"
+                      className="grid grid-cols-[1fr_120px_160px_80px] items-center px-3 py-3 rounded-lg hover:bg-blue-50 cursor-pointer border-b border-gray-200/50 last:border-0 group"
                       onClick={() => openDetail(c)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDetail(c) }}
                     >
-                      <span className="text-sm font-medium text-white">{c.name}</span>
-                      <span className="text-sm text-gray-400">{c.phone ?? '—'}</span>
-                      <span className="text-sm text-gray-400 truncate">{c.email ?? '—'}</span>
+                      <span className="text-sm font-medium text-gray-900">{c.name}</span>
+                      <span className="text-sm text-gray-500">{c.phone ?? '—'}</span>
+                      <span className="text-sm text-gray-500 truncate">{c.email ?? '—'}</span>
                       {/* Fix 2: action buttons stop propagation */}
                       <div
                         className="flex items-center justify-end gap-3"
                         onClick={e => e.stopPropagation()}
                       >
-                        <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-white text-xs">Edit</button>
-                        <button onClick={() => handleDeleteCustomer(c.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button>
+                        <button onClick={() => openEdit(c)} className="text-gray-500 hover:text-gray-900 text-xs">Edit</button>
+                        <button onClick={() => handleDeleteCustomer(c.id)} className="text-red-600 hover:text-red-600 text-xs">Delete</button>
                       </div>
                     </div>
                   ))}
@@ -263,15 +263,15 @@ function CustomersModal({
                   <div className="col-span-2">
                     <p className="text-gray-500 mb-1">Contact Preference</p>
                     <div className="flex gap-1.5">
-                      {selectedCustomer.contact_preferences.call && <span className="text-[10px] font-semibold bg-emerald-900 text-emerald-200 px-1.5 py-0.5 rounded">📞 Call</span>}
-                      {selectedCustomer.contact_preferences.text && <span className="text-[10px] font-semibold bg-blue-900 text-blue-200 px-1.5 py-0.5 rounded">💬 Text</span>}
-                      {selectedCustomer.contact_preferences.whatsapp && <span className="text-[10px] font-semibold bg-green-900 text-green-200 px-1.5 py-0.5 rounded">📱 WhatsApp</span>}
+                      {selectedCustomer.contact_preferences.call && <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">📞 Call</span>}
+                      {selectedCustomer.contact_preferences.text && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">💬 Text</span>}
+                      {selectedCustomer.contact_preferences.whatsapp && <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">📱 WhatsApp</span>}
                     </div>
                   </div>
                 )}
               </div>
               <div>
-                <h3 className="font-semibold mb-3 text-sm text-gray-300">Projects</h3>
+                <h3 className="font-semibold mb-3 text-sm text-gray-700">Projects</h3>
                 {loadingProjects ? (
                   <p className="text-gray-500 text-sm">Loading...</p>
                 ) : customerProjects.length === 0 ? (
@@ -281,10 +281,10 @@ function CustomersModal({
                     {customerProjects.map(p => (
                       <button key={p.id}
                         onClick={() => { onClose(); onNavigate(`/dashboard/projects/${p.id}?view=sales`) }}
-                        className="w-full text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg px-4 py-3 transition-colors">
+                        className="w-full text-left bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg px-4 py-3 transition-colors">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'New Project'}</span>
-                          <span className="text-xs text-gray-400">{p.status ? STATUS_LABELS[p.status] : '—'}</span>
+                          <span className="text-xs text-gray-500">{p.status ? STATUS_LABELS[p.status] : '—'}</span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{new Date(p.updated_at).toLocaleDateString()}</p>
                       </button>
@@ -300,46 +300,46 @@ function CustomersModal({
             <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1">Full Name *</label>
+                  <label className="block text-xs text-gray-500 mb-1">Full Name *</label>
                   <input required value={formName} onChange={e => setFormName(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Phone</label>
+                  <label className="block text-xs text-gray-500 mb-1">Phone</label>
                   <input value={formPhone} onChange={e => setFormPhone(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Email</label>
+                  <label className="block text-xs text-gray-500 mb-1">Email</label>
                   <input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1">Address</label>
+                  <label className="block text-xs text-gray-500 mb-1">Address</label>
                   <input value={formAddress} onChange={e => setFormAddress(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1">Preferred Contact</label>
+                  <label className="block text-xs text-gray-500 mb-1">Preferred Contact</label>
                   <div className="flex gap-3">
                     {(['call', 'text', 'whatsapp'] as const).map(pref => (
                       <label key={pref} className="flex items-center gap-1.5 cursor-pointer">
                         <input type="checkbox" checked={!!formPrefs[pref]}
                           onChange={e => setFormPrefs(p => ({ ...p, [pref]: e.target.checked }))}
-                          className="accent-amber-500 w-3.5 h-3.5" />
-                        <span className="text-sm text-gray-300 capitalize">{pref === 'whatsapp' ? 'WhatsApp' : pref.charAt(0).toUpperCase() + pref.slice(1)}</span>
+                          className="accent-blue-600 w-3.5 h-3.5" />
+                        <span className="text-sm text-gray-700 capitalize">{pref === 'whatsapp' ? 'WhatsApp' : pref.charAt(0).toUpperCase() + pref.slice(1)}</span>
                       </label>
                     ))}
                   </div>
                 </div>
               </div>
-              {formError && <p className="text-red-400 text-sm">{formError}</p>}
+              {formError && <p className="text-red-600 text-sm">{formError}</p>}
               <div className="flex gap-3">
                 <button type="submit" disabled={formSaving || !formName}
-                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold px-5 py-2 rounded-lg text-sm">
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg text-sm">
                   {formSaving ? 'Saving...' : 'Save Customer'}
                 </button>
-                <button type="button" onClick={() => setState('list')} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                <button type="button" onClick={() => setState('list')} className="text-gray-500 hover:text-gray-900 text-sm">Cancel</button>
               </div>
             </form>
           )}
@@ -450,66 +450,66 @@ function NewProjectModal({
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md shadow-2xl">
+      <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-md shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             {step === 'details' && (
-              <button onClick={() => setStep('customer')} className="text-gray-400 hover:text-white text-sm">← Back</button>
+              <button onClick={() => setStep('customer')} className="text-gray-500 hover:text-gray-900 text-sm">← Back</button>
             )}
-            <h2 className="font-semibold text-white">
+            <h2 className="font-semibold text-gray-900">
               {step === 'customer' ? 'New Project — Customer' : 'New Project — Details'}
             </h2>
           </div>
           <div className="flex items-center gap-3">
             {/* Step indicator */}
             <div className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-full ${step === 'customer' ? 'bg-amber-500' : 'bg-gray-600'}`} />
-              <span className={`w-2 h-2 rounded-full ${step === 'details' ? 'bg-amber-500' : 'bg-gray-600'}`} />
+              <span className={`w-2 h-2 rounded-full ${step === 'customer' ? 'bg-blue-600' : 'bg-gray-300'}`} />
+              <span className={`w-2 h-2 rounded-full ${step === 'details' ? 'bg-blue-600' : 'bg-gray-300'}`} />
             </div>
-            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
           </div>
         </div>
 
         {/* Step 1: Customer */}
         {step === 'customer' && (
           <form onSubmit={handleNext} className="p-5 space-y-4">
-            <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               <button type="button" onClick={() => setMode('existing')}
-                className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'existing' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>
+                className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'existing' ? 'bg-gray-200 text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>
                 Select Existing
               </button>
               <button type="button" onClick={() => setMode('new')}
-                className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'new' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>
+                className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'new' ? 'bg-gray-200 text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>
                 Create New
               </button>
             </div>
 
             {mode === 'existing' ? (
               <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">— No customer yet —</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             ) : (
               <div className="space-y-2">
                 <input required placeholder="Full name *" value={newName} onChange={e => setNewName(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <input placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <input placeholder="Email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <input placeholder="Address" value={newAddress} onChange={e => setNewAddress(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             )}
 
             <div className="flex gap-2 pt-1">
               <button type="submit" disabled={mode === 'new' && !newName.trim()}
-                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">
                 Next →
               </button>
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900">Cancel</button>
             </div>
           </form>
         )}
@@ -519,18 +519,18 @@ function NewProjectModal({
           <form onSubmit={handleCreate} className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Project Type</label>
+                <label className="block text-xs text-gray-500 mb-1">Project Type</label>
                 <select value={projectType} onChange={e => setProjectType(e.target.value as ProjectType)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">— Select type —</option>
                   {PROJECT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
                   {customTypes.filter(ct => ct.is_active).map(ct => <option key={ct.key} value={ct.key}>{ct.name}</option>)}
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Primary Material</label>
+                <label className="block text-xs text-gray-500 mb-1">Primary Material</label>
                 <select value={primaryMaterial} onChange={e => setPrimaryMaterial(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">— Select material —</option>
                   {['Maple', 'Walnut', 'Oak', 'Cherry', 'Painted MDF', 'Other'].map(m => (
                     <option key={m} value={m}>{m}</option>
@@ -538,23 +538,23 @@ function NewProjectModal({
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Address</label>
+                <label className="block text-xs text-gray-500 mb-1">Address</label>
                 <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Job site address"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Notes</label>
+                <label className="block text-xs text-gray-500 mb-1">Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Any initial notes..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none" />
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
             </div>
-            {error && <p className="text-red-400 text-sm">{error}</p>}
+            {error && <p className="text-red-600 text-sm">{error}</p>}
             <div className="flex gap-2 pt-1">
               <button type="submit" disabled={creating}
-                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold py-2 rounded-lg text-sm">
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">
                 {creating ? 'Creating...' : 'Create Project'}
               </button>
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900">Cancel</button>
             </div>
           </form>
         )}
@@ -594,7 +594,7 @@ function StatusBadgeSelect({
     }
   }
 
-  const colorClass = currentStatus ? STATUS_COLORS[currentStatus] : 'bg-gray-700 text-gray-300'
+  const colorClass = currentStatus ? STATUS_COLORS[currentStatus] : 'bg-gray-200 text-gray-700'
 
   return (
     <div className="relative inline-block" onClick={e => e.stopPropagation()}>
@@ -690,11 +690,11 @@ export default function SalesDashboard() {
         <h1 className="text-2xl font-bold">Sales Dashboard</h1>
         <div className="flex items-center gap-3">
           <button onClick={() => setShowCustomers(true)}
-            className="text-sm text-gray-400 hover:text-white transition-colors">
+            className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
             Customers
           </button>
           <button onClick={() => setShowNewProject(true)}
-            className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg transition-colors text-sm">
+            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm">
             + New Project
           </button>
         </div>
@@ -710,22 +710,22 @@ export default function SalesDashboard() {
             return (
               <div key={status}>
                 <div className="flex items-center gap-2 mb-3">
-                  <h2 className="font-bold text-white">{STATUS_LABELS[status]}</h2>
-                  <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{group.length}</span>
+                  <h2 className="font-bold text-gray-900">{STATUS_LABELS[status]}</h2>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{group.length}</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {group.map(project => (
                     <div
                       key={project.id}
                       onClick={() => router.push(`/dashboard/projects/${project.id}?view=sales`)}
-                      className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2.5 hover:border-gray-700 transition-colors cursor-pointer"
+                      className="bg-white shadow-sm border border-gray-200 rounded-xl p-4 flex flex-col gap-2.5 hover:border-gray-300 transition-colors cursor-pointer"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-semibold text-white text-sm truncate">
+                          <p className="font-semibold text-gray-900 text-sm truncate">
                             {project.customer?.name ?? <span className="text-gray-500 italic">No customer</span>}
                           </p>
-                          <p className="text-xs text-gray-400 capitalize mt-0.5">
+                          <p className="text-xs text-gray-500 capitalize mt-0.5">
                             {project.project_type?.replace(/_/g, ' ') ?? '—'}
                           </p>
                         </div>
@@ -736,7 +736,7 @@ export default function SalesDashboard() {
                         />
                       </div>
                       <div className="flex items-center justify-between mt-auto">
-                        <span className="text-xs text-gray-600">
+                        <span className="text-xs text-gray-400">
                           {new Date(project.updated_at).toLocaleDateString()}
                         </span>
                       </div>
