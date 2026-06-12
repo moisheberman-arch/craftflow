@@ -86,11 +86,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </Link>
           <div className="relative group">
-            <button className={`text-sm transition-colors ${isSettings ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Link href="/dashboard/settings" className={`text-sm transition-colors ${isSettings ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               Settings ▾
-            </button>
+            </Link>
             <div className="absolute right-0 top-full pt-1 hidden group-hover:block z-50">
               <div className="bg-white shadow-sm border border-gray-200 rounded-lg shadow-xl overflow-hidden min-w-[160px]">
+                <Link href="/dashboard/settings/workflow" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Workflow</Link>
                 <Link href="/dashboard/settings/pricing" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Pricing Config</Link>
                 <Link href="/dashboard/settings/project-types" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Project Types</Link>
                 <Link href="/dashboard/settings/steps" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900">Step Templates</Link>

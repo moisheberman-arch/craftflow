@@ -6,8 +6,9 @@ import {
   getProjects, createProject, getCustomers, createCustomer,
   updateCustomer, getProjectsByCustomerId, updateProject,
   getPricingAddons, seedDefaultStepsIfEmpty, getCustomProjectTypes,
-  getSamplesOut,
+  getSamplesOut, initializeProjectWorkflow,
 } from '@/lib/api/supabase-client'
+import FunnelDashboard from '@/components/FunnelDashboard'
 import { supabase } from '@/lib/supabase'
 import type { Project, ProjectStatus, Customer, ProjectType, PricingAddon, ContactPreferences, CustomProjectType } from '@/lib/core/types'
 
@@ -587,6 +588,7 @@ function StatusBadgeSelect({
       onStatusChanged(projectId, newStatus)
       if (newStatus === 'deposit_received') {
         seedDefaultStepsIfEmpty(projectId).catch(console.error)
+        initializeProjectWorkflow(projectId).catch(console.error)
       }
     } catch (err) {
       console.error('Status update failed', err)
@@ -710,6 +712,12 @@ export default function SalesDashboard() {
             + New Project
           </button>
         </div>
+      </div>
+
+      {/* Project Funnel — post-deposit workflow tasks owned by Sales */}
+      <div className="mb-8">
+        <h2 className="font-bold text-gray-900 mb-3">Project Funnel</h2>
+        <FunnelDashboard ownedBy="sales" columns={2} />
       </div>
 
       {loading ? (

@@ -28,6 +28,14 @@ import type {
   ApprovalType,
   DeliveryPhoto,
   Sample,
+  WorkflowStatus,
+  WorkflowTask,
+  ProjectWorkflow,
+  ProjectStatusHistory,
+  ProjectTask,
+  ProjectFunnelEntry,
+  AdvanceResult,
+  TaskOwner,
 } from '@/lib/core/types'
 
 // ── Customers ──────────────────────────────────────────────────────────────
@@ -1203,4 +1211,424 @@ export async function getShopTaskProjects(): Promise<ShopTaskProject[]> {
     })
   }))
   return results
+}
+
+// ── Workflow: Statuses & Task Templates ──────────────────────────────────────
+
+export async function getWorkflowStatuses(): Promise<WorkflowStatus[]> {
+  const { data, error } = await supabase
+    .from('workflow_statuses')
+    .select('*')
+    .eq('is_active', true)
+    .order('sequence_order')
+  if (error) throw error
+  return data as WorkflowStatus[]
+}
+
+// All statuses including inactive — for the workflow settings page
+export async function getAllWorkflowStatuses(): Promise<WorkflowStatus[]> {
+  const { data, error } = await supabase
+    .from('workflow_statuses')
+    .select('*')
+    .order('sequence_order')
+  if (error) throw error
+  return data as WorkflowStatus[]
+}
+
+export async function addWorkflowStatus(
+  input: Omit<WorkflowStatus, 'id' | 'created_at'>
+): Promise<WorkflowStatus> {
+  const { data, error } = await supabase.from('workflow_statuses').insert(input).select().single()
+  if (error) throw error
+  return data as WorkflowStatus
+}
+
+export async function updateWorkflowStatus(
+  id: string,
+  input: Partial<Omit<WorkflowStatus, 'id' | 'created_at'>>
+): Promise<WorkflowStatus> {
+  const { data, error } = await supabase
+    .from('workflow_statuses').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data as WorkflowStatus
+}
+
+export async function deleteWorkflowStatus(id: string): Promise<void> {
+  const { error } = await supabase.from('workflow_statuses').delete().eq('id', id)
+  if (error) throw error
+}
+
+// sequence_order is UNIQUE, so reorder in two passes (temp offsets, then final)
+export async function reorderWorkflowStatuses(orderedIds: string[]): Promise<void> {
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from('workflow_statuses').update({ sequence_order: 1000 + i }).eq('id', orderedIds[i])
+    if (error) throw error
+  }
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from('workflow_statuses').update({ sequence_order: i + 1 }).eq('id', orderedIds[i])
+    if (error) throw error
+  }
+}
+
+export async function getWorkflowTasksByStatusId(statusId: string): Promise<WorkflowTask[]> {
+  const { data, error } = await supabase
+    .from('workflow_tasks')
+    .select('*')
+    .eq('status_id', statusId)
+    .eq('is_active', true)
+    .order('sequence_order')
+  if (error) throw error
+  return data as WorkflowTask[]
+}
+
+// All tasks including inactive — for the workflow settings page
+export async function getAllWorkflowTasksByStatusId(statusId: string): Promise<WorkflowTask[]> {
+  const { data, error } = await supabase
+    .from('workflow_tasks')
+    .select('*')
+    .eq('status_id', statusId)
+    .order('sequence_order')
+  if (error) throw error
+  return data as WorkflowTask[]
+}
+
+export async function getWorkflowTaskCounts(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('workflow_tasks')
+    .select('status_id')
+    .eq('is_active', true)
+  if (error) throw error
+  const counts: Record<string, number> = {}
+  for (const row of (data ?? []) as { status_id: string }[]) {
+    counts[row.status_id] = (counts[row.status_id] ?? 0) + 1
+  }
+  return counts
+}
+
+export async function addWorkflowTask(
+  input: Omit<WorkflowTask, 'id' | 'created_at'>
+): Promise<WorkflowTask> {
+  const { data, error } = await supabase.from('workflow_tasks').insert(input).select().single()
+  if (error) throw error
+  return data as WorkflowTask
+}
+
+export async function updateWorkflowTask(
+  id: string,
+  input: Partial<Omit<WorkflowTask, 'id' | 'created_at'>>
+): Promise<WorkflowTask> {
+  const { data, error } = await supabase
+    .from('workflow_tasks').update(input).eq('id', id).select().single()
+  if (error) throw error
+  return data as WorkflowTask
+}
+
+export async function deleteWorkflowTask(id: string): Promise<void> {
+  const { error } = await supabase.from('workflow_tasks').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function reorderWorkflowTasks(orderedIds: string[]): Promise<void> {
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from('workflow_tasks').update({ sequence_order: i + 1 }).eq('id', orderedIds[i])
+    if (error) throw error
+  }
+}
+
+// ── Workflow: Project State ──────────────────────────────────────────────────
+
+export async function getProjectWorkflow(projectId: string): Promise<ProjectWorkflow | null> {
+  const { data, error } = await supabase
+    .from('project_workflow')
+    .select('*, current_status:workflow_statuses!current_status_id(*)')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (error) throw error
+  return data as ProjectWorkflow | null
+}
+
+export async function getProjectTasks(projectId: string, statusId: string): Promise<ProjectTask[]> {
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('status_id', statusId)
+    .order('created_at')
+  if (error) throw error
+  return data as ProjectTask[]
+}
+
+export async function completeTask(taskId: string): Promise<ProjectTask> {
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .update({ completed: true, completed_at: new Date().toISOString() })
+    .eq('id', taskId).select().single()
+  if (error) throw error
+  return data as ProjectTask
+}
+
+export async function uncompleteTask(taskId: string): Promise<ProjectTask> {
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .update({ completed: false, completed_at: null })
+    .eq('id', taskId).select().single()
+  if (error) throw error
+  return data as ProjectTask
+}
+
+export async function addAdhocTask(
+  projectId: string,
+  statusId: string,
+  taskName: string,
+  ownedBy: TaskOwner,
+  isMandatory: boolean
+): Promise<ProjectTask> {
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .insert({
+      project_id: projectId,
+      workflow_task_id: null,
+      status_id: statusId,
+      task_name: taskName,
+      is_mandatory: isMandatory,
+      owned_by: ownedBy,
+      is_adhoc: true,
+      completed: false,
+    })
+    .select().single()
+  if (error) throw error
+  return data as ProjectTask
+}
+
+export async function getProjectStatusHistory(projectId: string): Promise<ProjectStatusHistory[]> {
+  const { data, error } = await supabase
+    .from('project_status_history')
+    .select('*, from_status:workflow_statuses!from_status_id(*), to_status:workflow_statuses!to_status_id(*)')
+    .eq('project_id', projectId)
+    .order('advanced_at', { ascending: false })
+  if (error) throw error
+  return data as ProjectStatusHistory[]
+}
+
+// Generate task instances for a project entering a status. Removes stale
+// incomplete template instances for that status (so a re-entry after rejection
+// starts fresh) while keeping completed instances and adhoc tasks.
+async function generateTaskInstances(projectId: string, statusId: string): Promise<void> {
+  const templates = await getWorkflowTasksByStatusId(statusId)
+  const { error: delError } = await supabase
+    .from('project_tasks')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('status_id', statusId)
+    .eq('completed', false)
+    .eq('is_adhoc', false)
+  if (delError) throw delError
+  if (templates.length === 0) return
+  const { error } = await supabase.from('project_tasks').insert(
+    templates.map(t => ({
+      project_id: projectId,
+      workflow_task_id: t.id,
+      status_id: statusId,
+      task_name: t.task_name,
+      is_mandatory: t.is_mandatory,
+      owned_by: t.owned_by,
+      is_adhoc: false,
+      completed: false,
+      has_print_action: t.has_print_action,
+      print_label: t.print_label,
+    }))
+  )
+  if (error) throw error
+}
+
+export async function initializeProjectWorkflow(projectId: string): Promise<ProjectWorkflow | null> {
+  // Already initialized? Leave it alone.
+  const existing = await getProjectWorkflow(projectId)
+  if (existing) return existing
+
+  const statuses = await getWorkflowStatuses()
+  const first = statuses[0]
+  if (!first) return null
+
+  const { data, error } = await supabase
+    .from('project_workflow')
+    .insert({ project_id: projectId, current_status_id: first.id })
+    .select('*, current_status:workflow_statuses!current_status_id(*)')
+    .single()
+  if (error) {
+    // Unique violation = another caller initialized concurrently — fetch theirs.
+    if ((error as { code?: string }).code === '23505') return getProjectWorkflow(projectId)
+    throw error
+  }
+
+  await supabase.from('project_status_history').insert({
+    project_id: projectId, from_status_id: null, to_status_id: first.id,
+  })
+  await generateTaskInstances(projectId, first.id)
+  return data as ProjectWorkflow
+}
+
+export async function advanceProjectStatus(
+  projectId: string,
+  overrideReason?: string
+): Promise<AdvanceResult> {
+  const workflow = await getProjectWorkflow(projectId)
+  if (!workflow) return { advanced: false, blocked: true, incompleteMandatoryTasks: [] }
+
+  const { data: incompleteData, error: incErr } = await supabase
+    .from('project_tasks')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('status_id', workflow.current_status_id)
+    .eq('completed', false)
+    .eq('is_mandatory', true)
+  if (incErr) throw incErr
+  const incomplete = (incompleteData ?? []) as ProjectTask[]
+
+  if (incomplete.length > 0 && !overrideReason) {
+    return { advanced: false, blocked: true, incompleteMandatoryTasks: incomplete }
+  }
+
+  const statuses = await getWorkflowStatuses()
+  const currentIdx = statuses.findIndex(s => s.id === workflow.current_status_id)
+  const next = currentIdx >= 0 ? statuses[currentIdx + 1] : undefined
+  if (!next) {
+    // Already at the final status — nothing to advance to.
+    return { advanced: false, blocked: false, incompleteMandatoryTasks: [] }
+  }
+
+  const usedOverride = incomplete.length > 0 && !!overrideReason
+  const { error: updErr } = await supabase
+    .from('project_workflow')
+    .update({
+      current_status_id: next.id,
+      previous_status_id: workflow.current_status_id,
+      entered_current_status_at: new Date().toISOString(),
+      override_used: usedOverride,
+      override_reason: usedOverride ? overrideReason : null,
+    })
+    .eq('id', workflow.id)
+  if (updErr) throw updErr
+
+  await supabase.from('project_status_history').insert({
+    project_id: projectId,
+    from_status_id: workflow.current_status_id,
+    to_status_id: next.id,
+    override_used: usedOverride,
+    override_reason: usedOverride ? overrideReason : null,
+  })
+
+  await generateTaskInstances(projectId, next.id)
+  return { advanced: true, blocked: false, incompleteMandatoryTasks: [], newStatus: next }
+}
+
+export async function rejectSketch(projectId: string, rejectionReason: string): Promise<void> {
+  const workflow = await getProjectWorkflow(projectId)
+  if (!workflow) throw new Error('Project has no workflow record')
+
+  const statuses = await getWorkflowStatuses()
+  const first = statuses.find(s => s.sequence_order === 1) ?? statuses[0]
+  if (!first) throw new Error('No workflow statuses configured')
+
+  const { error: updErr } = await supabase
+    .from('project_workflow')
+    .update({
+      current_status_id: first.id,
+      previous_status_id: workflow.current_status_id,
+      entered_current_status_at: new Date().toISOString(),
+      override_used: false,
+      override_reason: null,
+    })
+    .eq('id', workflow.id)
+  if (updErr) throw updErr
+
+  await supabase.from('project_status_history').insert({
+    project_id: projectId,
+    from_status_id: workflow.current_status_id,
+    to_status_id: first.id,
+    rejection: true,
+    rejection_reason: rejectionReason,
+  })
+
+  await generateTaskInstances(projectId, first.id)
+
+  // Flag the delivery window as affected on the project record
+  const dateStr = new Date().toLocaleDateString('en-US')
+  const note = `Sketch rejected on ${dateStr}. Reason: ${rejectionReason}. Delivery timeline affected.`
+  const { data: proj } = await supabase.from('projects').select('notes').eq('id', projectId).maybeSingle()
+  const existingNotes = (proj as { notes: string | null } | null)?.notes
+  await supabase
+    .from('projects')
+    .update({ notes: existingNotes ? `${existingNotes}\n${note}` : note })
+    .eq('id', projectId)
+}
+
+// All open tasks across all projects for one owner, grouped per project,
+// ordered by time in current status (oldest first).
+export async function getAllOpenProjectTasks(ownedBy: TaskOwner): Promise<ProjectFunnelEntry[]> {
+  const { data: workflows, error } = await supabase
+    .from('project_workflow')
+    .select('*, current_status:workflow_statuses!current_status_id(*), project:projects(*, customer:customers(*))')
+    .order('entered_current_status_at')
+  if (error) throw error
+  const rows = (workflows ?? []) as (ProjectWorkflow & { project?: Project })[]
+  if (rows.length === 0) return []
+
+  const { data: tasksData, error: tasksErr } = await supabase
+    .from('project_tasks')
+    .select('*')
+    .in('project_id', rows.map(w => w.project_id))
+    .eq('completed', false)
+  if (tasksErr) throw tasksErr
+  const openTasks = (tasksData ?? []) as ProjectTask[]
+
+  return rows.map(w => {
+    const currentTasks = openTasks.filter(
+      t => t.project_id === w.project_id && t.status_id === w.current_status_id
+    )
+    return {
+      project: w.project as Project,
+      workflow: w,
+      tasks: currentTasks.filter(t => t.owned_by === ownedBy),
+      openMandatoryAll: currentTasks.filter(t => t.is_mandatory).length,
+      daysInStatus: Math.floor(
+        (Date.now() - new Date(w.entered_current_status_at).getTime()) / 86400000
+      ),
+    }
+  })
+}
+
+// One-time backfill: projects already past deposit in the legacy pipeline get a
+// workflow record at the matching status. Safe to call repeatedly — the unique
+// project_id constraint prevents duplicates.
+export async function backfillProjectWorkflows(): Promise<void> {
+  const [{ data: projectsData }, { data: existingData }, statuses] = await Promise.all([
+    supabase.from('projects').select('id, status').in('status', ['deposit_received', 'in_production', 'completed']),
+    supabase.from('project_workflow').select('project_id'),
+    getWorkflowStatuses(),
+  ])
+  const existing = new Set(((existingData ?? []) as { project_id: string }[]).map(r => r.project_id))
+  const bySeq = (seq: number) => statuses.find(s => s.sequence_order === seq)
+  const statusMap: Record<string, WorkflowStatus | undefined> = {
+    deposit_received: bySeq(1),
+    in_production: bySeq(4),
+    completed: bySeq(8),
+  }
+
+  for (const p of ((projectsData ?? []) as { id: string; status: string }[])) {
+    if (existing.has(p.id)) continue
+    const target = statusMap[p.status]
+    if (!target) continue
+    const { error } = await supabase
+      .from('project_workflow')
+      .insert({ project_id: p.id, current_status_id: target.id })
+    if (error) continue // unique violation from a concurrent backfill — skip
+    await supabase.from('project_status_history').insert({
+      project_id: p.id, from_status_id: null, to_status_id: target.id,
+    })
+    await generateTaskInstances(p.id, target.id)
+  }
 }

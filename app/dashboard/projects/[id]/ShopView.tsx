@@ -14,7 +14,9 @@ import {
   setCurrentStep, autoAdvanceCurrentStep, seedDefaultStepsIfEmpty,
   getFilesByProjectId, uploadProjectFile, getProjectFileUrl, deleteProjectFile,
   getDeliveryPhotosByProjectId, uploadDeliveryPhoto, getDeliveryPhotoUrl, deleteDeliveryPhoto,
+  initializeProjectWorkflow,
 } from '@/lib/api/supabase-client'
+import WorkflowPanel from '@/components/WorkflowPanel'
 import type {
   Project, Customer, MaterialItem, ProductionStep, StepLibraryItem,
   DesignMeetingNote, ShoppingListItem, StepSubtask, OpenQuestion,
@@ -398,6 +400,7 @@ export default function ShopView({ project: initialProject }: { project: Project
       setProject(updated)
       if (pStatus === 'deposit_received') {
         seedDefaultStepsIfEmpty(id).catch(console.error)
+        initializeProjectWorkflow(id).catch(console.error)
       }
       setDetailsSaved(true)
       setTimeout(() => setDetailsSaved(false), 2000)
@@ -909,6 +912,9 @@ export default function ShopView({ project: initialProject }: { project: Project
 
         {/* ── RIGHT COLUMN ── */}
         <div className="flex-1 min-w-0 space-y-4 overflow-y-auto">
+
+          {/* Workflow status + tasks */}
+          <WorkflowPanel projectId={id} />
 
           {/* Current Step — prominent */}
           <div className={`rounded-xl p-5 border-2 ${currentStep ? 'border-blue-400 bg-blue-50/20' : 'border-dashed border-gray-300 bg-white shadow-sm'}`}>

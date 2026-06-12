@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ShopView from './ShopView'
-import { seedDefaultStepsIfEmpty } from '@/lib/api/supabase-client'
+import WorkflowPanel from '@/components/WorkflowPanel'
+import { seedDefaultStepsIfEmpty, initializeProjectWorkflow } from '@/lib/api/supabase-client'
 import {
   getProjectById, updateProject, getCustomers,
   getMaterialsByProjectId, addMaterial, updateMaterial, deleteMaterial,
@@ -338,9 +339,10 @@ export default function ProjectDetailPage() {
         },
       })
       setProject(updated)
-      // Auto-seed default steps when status moves to deposit_received
+      // Auto-seed default steps + workflow when status moves to deposit_received
       if (status === 'deposit_received') {
         await seedDefaultStepsIfEmpty(id).catch(console.error)
+        await initializeProjectWorkflow(id).catch(console.error)
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -669,6 +671,9 @@ export default function ProjectDetailPage() {
               )}
             </div>
           )}
+
+          {/* Workflow status + tasks */}
+          <WorkflowPanel projectId={id} />
 
           {/* Project fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

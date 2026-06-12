@@ -316,6 +316,95 @@ export interface ShoppingListItem {
   project?: Project
 }
 
+// ── Workflow (Status + Tasks model) ─────────────────────────────────────────
+
+export type TaskOwner = 'sales' | 'shop'
+
+export interface WorkflowStatus {
+  id: string
+  created_at: string
+  name: string
+  sequence_order: number
+  description: string | null
+  color: string | null
+  is_active: boolean
+}
+
+export interface WorkflowTask {
+  id: string
+  created_at: string
+  status_id: string
+  task_name: string
+  is_mandatory: boolean
+  owned_by: TaskOwner
+  sequence_order: number
+  has_print_action: boolean
+  print_label: string | null
+  is_active: boolean
+}
+
+export interface ProjectWorkflow {
+  id: string
+  created_at: string
+  project_id: string
+  current_status_id: string
+  entered_current_status_at: string
+  previous_status_id: string | null
+  override_used: boolean
+  override_reason: string | null
+  // joined
+  current_status?: WorkflowStatus
+  project?: Project
+}
+
+export interface ProjectStatusHistory {
+  id: string
+  created_at: string
+  project_id: string
+  from_status_id: string | null
+  to_status_id: string
+  advanced_at: string
+  override_used: boolean
+  override_reason: string | null
+  rejection: boolean
+  rejection_reason: string | null
+  // joined
+  from_status?: WorkflowStatus
+  to_status?: WorkflowStatus
+}
+
+export interface ProjectTask {
+  id: string
+  created_at: string
+  project_id: string
+  workflow_task_id: string | null
+  status_id: string
+  task_name: string
+  is_mandatory: boolean
+  owned_by: TaskOwner
+  is_adhoc: boolean
+  completed: boolean
+  completed_at: string | null
+  has_print_action: boolean
+  print_label: string | null
+}
+
+// One funnel row: a project + its workflow position + open tasks
+export interface ProjectFunnelEntry {
+  project: Project
+  workflow: ProjectWorkflow          // current_status joined
+  tasks: ProjectTask[]               // open tasks for the requested owner, current status
+  openMandatoryAll: number           // open mandatory tasks across BOTH owners (gates advancing)
+  daysInStatus: number
+}
+
+export interface AdvanceResult {
+  advanced: boolean
+  blocked: boolean
+  incompleteMandatoryTasks: ProjectTask[]
+  newStatus?: WorkflowStatus
+}
+
 export type SampleType = 'wood_species' | 'stain_color' | 'paint_color' | 'hardware' | 'other'
 
 export interface Sample {

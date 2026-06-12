@@ -11,25 +11,23 @@ import {
   getOpenQuestionsByProjectId,
   getUnresolvedQuestionsAllProjects,
   getCalendarEvents, addCalendarEvent, deleteCalendarEvent,
-  getShopTaskProjects, type ShopTaskProject,
   autoAdvanceCurrentStep,
   getAllUnpurchasedShoppingItems,
   updateShoppingListItem,
   seedDefaultStepsIfEmpty,
   getFilesByProjectId,
-  updateSubtask,
-  getOpenTouchups,
   getPendingDesignMeetingRequests,
   addShoppingListItem,
   addDesignMeetingNote,
+  initializeProjectWorkflow,
 } from '@/lib/api/supabase-client'
+import FunnelDashboard from '@/components/FunnelDashboard'
 import type {
   Project, ProductionStep, MaterialItem, StepSubtask,
   OpenQuestion, CalendarEvent, CalendarEventType, ProjectStatus, ShoppingListItem,
-  Touchup,
 } from '@/lib/core/types'
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface EnrichedProject extends Project {
   steps: ProductionStep[]
@@ -47,7 +45,7 @@ interface EnrichedProject extends Project {
   hasFiles: boolean
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
@@ -100,7 +98,7 @@ function durationLabel(mins?: number | null): string {
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
-// ── Mini Calendar ──────────────────────────────────────────────────────────
+// â”€â”€ Mini Calendar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function MiniCalendar({
   events, month, year, onMonthChange, onAddEvent, onDeleteEvent, projectNames,
@@ -140,10 +138,10 @@ function MiniCalendar({
     <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
       <div className="flex items-center justify-between mb-3">
         <button onClick={() => month === 1 ? onMonthChange(12, year - 1) : onMonthChange(month - 1, year)}
-          className="text-gray-500 hover:text-gray-900 px-1.5 py-0.5 rounded text-sm">◀</button>
+          className="text-gray-500 hover:text-gray-900 px-1.5 py-0.5 rounded text-sm">â—€</button>
         <h3 className="text-xs font-semibold text-gray-900">{MONTH_NAMES[month - 1]} {year}</h3>
         <button onClick={() => month === 12 ? onMonthChange(1, year + 1) : onMonthChange(month + 1, year)}
-          className="text-gray-500 hover:text-gray-900 px-1.5 py-0.5 rounded text-sm">▶</button>
+          className="text-gray-500 hover:text-gray-900 px-1.5 py-0.5 rounded text-sm">â–¶</button>
       </div>
       <div className="grid grid-cols-7 mb-1">
         {DAYS_OF_WEEK.map(d => (
@@ -170,9 +168,9 @@ function MiniCalendar({
                     ev.event_type === 'reminder' ? 'bg-orange-100 text-orange-700' :
                     ev.event_type === 'milestone' ? 'bg-emerald-100 text-emerald-700' :
                     'bg-gray-200 text-gray-700'
-                  }`}>{ev.title}{ev.event_time ? ` — ${formatEventTime(ev.event_time)}` : ''}</div>
+                  }`}>{ev.title}{ev.event_time ? ` â€” ${formatEventTime(ev.event_time)}` : ''}</div>
                   <button onClick={e => { e.stopPropagation(); onDeleteEvent(ev.id) }}
-                    className="absolute -top-0.5 -right-0.5 hidden group-hover/ev:flex items-center justify-center w-3 h-3 bg-red-700 text-white rounded-full text-[8px]">×</button>
+                    className="absolute -top-0.5 -right-0.5 hidden group-hover/ev:flex items-center justify-center w-3 h-3 bg-red-700 text-white rounded-full text-[8px]">Ã—</button>
                 </div>
               ))}
             </div>
@@ -183,7 +181,7 @@ function MiniCalendar({
   )
 }
 
-// ── Add Event Modal ────────────────────────────────────────────────────────
+// â”€â”€ Add Event Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function AddEventModal({ date, onSave, onClose }: {
   date: string
@@ -216,8 +214,8 @@ function AddEventModal({ date, onSave, onClose }: {
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Add Event — {date}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
+          <h3 className="font-semibold text-gray-900">Add Event â€” {date}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">Ã—</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input required placeholder="Event title" value={title} onChange={e => setTitle(e.target.value)}
@@ -239,7 +237,7 @@ function AddEventModal({ date, onSave, onClose }: {
               <label className="block text-xs text-gray-500 mb-1">Duration</label>
               <select value={duration} onChange={e => setDuration(e.target.value)}
                 className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
-                <option value="">—</option>
+                <option value="">â€”</option>
                 {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </div>
@@ -259,7 +257,7 @@ function AddEventModal({ date, onSave, onClose }: {
   )
 }
 
-// ── Schedule Design Meeting Modal ──────────────────────────────────────────
+// â”€â”€ Schedule Design Meeting Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ScheduleMeetingModal({ project, onScheduled, onClose }: {
   project: Project
@@ -271,7 +269,7 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
   const [duration, setDuration] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
-  const label = `${project.customer?.name ?? 'Unknown'} — ${project.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+  const label = `${project.customer?.name ?? 'Unknown'} â€” ${project.project_type?.replace(/_/g, ' ') ?? 'Project'}`
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -280,7 +278,7 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
     try {
       const ev = await addCalendarEvent({
         event_date: date,
-        title: `Design Meeting — ${project.customer?.name ?? 'Unknown'}`,
+        title: `Design Meeting â€” ${project.customer?.name ?? 'Unknown'}`,
         notes: notes || null,
         project_id: project.id,
         event_type: 'appointment',
@@ -303,7 +301,7 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
       <div className="bg-white shadow-sm border border-gray-200 rounded-xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-gray-900 text-sm">Schedule Design Meeting</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">Ã—</button>
         </div>
         <p className="text-xs text-gray-500">{label}</p>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -323,7 +321,7 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
             <label className="block text-xs text-gray-500 mb-1">Duration</label>
             <select value={duration} onChange={e => setDuration(e.target.value)}
               className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none">
-              <option value="">—</option>
+              <option value="">â€”</option>
               {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
             </select>
           </div>
@@ -342,7 +340,7 @@ function ScheduleMeetingModal({ project, onScheduled, onClose }: {
   )
 }
 
-// ── Shopping List Panel ────────────────────────────────────────────────────
+// â”€â”€ Shopping List Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
   const [items, setItems] = useState<ShoppingListItem[]>([])
@@ -350,7 +348,7 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
   const [collapsed, setCollapsed] = useState(true)
   const [markingId, setMarkingId] = useState<string | null>(null)
 
-  // Quick-add — always visible, even when collapsed
+  // Quick-add â€” always visible, even when collapsed
   const [quickItem, setQuickItem] = useState('')
   const [quickProjectId, setQuickProjectId] = useState('')
   const [quickAdding, setQuickAdding] = useState(false)
@@ -400,15 +398,15 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
     const p = item.project as (Project & { customer?: { name: string } }) | undefined
     if (!p) {
       const ep = projects.find(proj => proj.id === item.project_id)
-      if (ep) return `${ep.customer?.name ?? 'Unknown'} — ${ep.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+      if (ep) return `${ep.customer?.name ?? 'Unknown'} â€” ${ep.project_type?.replace(/_/g, ' ') ?? 'Project'}`
       return 'Unknown Project'
     }
-    return `${p.customer?.name ?? 'Unknown'} — ${p.project_type?.replace(/_/g, ' ') ?? 'Project'}`
+    return `${p.customer?.name ?? 'Unknown'} â€” ${p.project_type?.replace(/_/g, ' ') ?? 'Project'}`
   }
 
   return (
     <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
-      {/* Quick-add — always visible above the collapse toggle */}
+      {/* Quick-add â€” always visible above the collapse toggle */}
       <div className="mb-2 space-y-1.5">
         <div className="flex gap-1.5">
           <input
@@ -434,7 +432,7 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
           <option value="">Link to project (optional)</option>
           {projects.map(p => (
             <option key={p.id} value={p.id}>
-              {p.customer?.name ?? 'Unknown'} — {p.project_type?.replace(/_/g, ' ') ?? 'Project'}
+              {p.customer?.name ?? 'Unknown'} â€” {p.project_type?.replace(/_/g, ' ') ?? 'Project'}
             </option>
           ))}
         </select>
@@ -450,7 +448,7 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
             <span className="text-xs bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-full">{items.length}</span>
           )}
         </div>
-        <span className="text-gray-500 text-xs">{collapsed ? '▼' : '▲'}</span>
+        <span className="text-gray-500 text-xs">{collapsed ? 'â–¼' : 'â–²'}</span>
       </button>
 
       {!collapsed && (
@@ -494,7 +492,7 @@ function ShoppingListPanel({ projects }: { projects: EnrichedProject[] }) {
   )
 }
 
-// ── Project Card ───────────────────────────────────────────────────────────
+// â”€â”€ Project Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ProjectCard({
   p,
@@ -550,7 +548,7 @@ function ProjectCard({
         hasNoCurrentStep: !newCurrentStep,
       })
       const stepName = result.nextStep?.step_name ?? 'All steps done!'
-      setToast(`Step complete — now: ${stepName}`)
+      setToast(`Step complete â€” now: ${stepName}`)
       setTimeout(() => setToast(null), 3500)
     } catch (err) {
       console.error(err)
@@ -568,6 +566,7 @@ function ProjectCard({
       onProjectUpdated(p.id, { status: newStatus })
       if (newStatus === 'deposit_received') {
         seedDefaultStepsIfEmpty(p.id).catch(console.error)
+        initializeProjectWorkflow(p.id).catch(console.error)
       }
     } finally {
       setSavingStatus(false)
@@ -592,7 +591,7 @@ function ProjectCard({
           className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap"
           onClick={e => e.stopPropagation()}
         >
-          ✓ {toast}
+          âœ“ {toast}
         </div>
       )}
 
@@ -602,15 +601,15 @@ function ProjectCard({
           className="text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing mt-0.5 shrink-0 text-base leading-none"
           onClick={e => e.stopPropagation()}
           title="Drag to reorder"
-        >⠿</span>
+        >â ¿</span>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-gray-900 text-base truncate">{p.customer?.name ?? 'No customer'}</p>
-          <p className="text-sm text-gray-500 capitalize">{p.project_type?.replace(/_/g, ' ') ?? '—'}</p>
+          <p className="text-sm text-gray-500 capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'â€”'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1 justify-end shrink-0">
           {deliveryLabel && (
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${deliveryColor}`}>
-              {daysLeft !== null && daysLeft < 0 ? '⚠ ' : ''}{deliveryLabel}
+              {daysLeft !== null && daysLeft < 0 ? 'âš  ' : ''}{deliveryLabel}
             </span>
           )}
           {p.openSubtasks > 0 && (
@@ -634,7 +633,7 @@ function ProjectCard({
                 onClick={() => onNavigate(p.id)}
                 className="text-[10px] font-semibold bg-red-50 border border-red-300 text-red-600 px-1.5 py-0.5 rounded-full hover:bg-red-200 transition-colors"
               >
-                ⚠ Missing: {label}
+                âš  Missing: {label}
               </button>
             ))}
           </div>
@@ -661,12 +660,12 @@ function ProjectCard({
             disabled={completing}
             className="w-full text-xs font-semibold bg-emerald-100 hover:bg-emerald-700 disabled:opacity-50 text-emerald-800 py-1.5 rounded-md transition-colors"
           >
-            {completing ? 'Saving...' : '✓ Complete & Advance'}
+            {completing ? 'Saving...' : 'âœ“ Complete & Advance'}
           </button>
         </div>
       ) : (
         <div className="bg-red-50/30 border border-red-200/60 rounded-lg px-3 py-2 mb-3">
-          <p className="text-xs text-red-600">No active step — click to set one</p>
+          <p className="text-xs text-red-600">No active step â€” click to set one</p>
         </div>
       )}
 
@@ -699,7 +698,7 @@ function ProjectCard({
           onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
           className="text-[10px] text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
         >
-          {expanded ? '▲ Hide' : '▼ Details'}
+          {expanded ? 'â–² Hide' : 'â–¼ Details'}
         </button>
       </div>
 
@@ -715,7 +714,7 @@ function ProjectCard({
             {upcomingSteps.length > 0 ? (
               <div className="space-y-0.5">
                 {upcomingSteps.map(s => (
-                  <p key={s.id} className="text-[10px] text-gray-500 truncate">· {s.step_name}</p>
+                  <p key={s.id} className="text-[10px] text-gray-500 truncate">Â· {s.step_name}</p>
                 ))}
               </div>
             ) : (
@@ -745,7 +744,7 @@ function ProjectCard({
   )
 }
 
-// ── In-Queue Row ───────────────────────────────────────────────────────────
+// â”€â”€ In-Queue Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function QueueRow({
   p,
@@ -784,17 +783,17 @@ function QueueRow({
         className="text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-base"
         onClick={e => e.stopPropagation()}
         title="Drag to reorder"
-      >⠿</span>
+      >â ¿</span>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-gray-900">
           {p.customer?.name ?? 'No customer'}
           <span className="text-gray-500 font-normal ml-2 text-sm capitalize">
-            — {p.project_type?.replace(/_/g, ' ') ?? '—'}
+            â€” {p.project_type?.replace(/_/g, ' ') ?? 'â€”'}
           </span>
         </p>
         <p className="text-xs text-gray-500 mt-0.5">
           In queue {p.queueDays} {p.queueDays === 1 ? 'day' : 'days'}
-          {p.steps.length > 0 && ` · ${p.stepsCompleted}/${p.steps.length} steps pre-production`}
+          {p.steps.length > 0 && ` Â· ${p.stepsCompleted}/${p.steps.length} steps pre-production`}
         </p>
       </div>
       <button
@@ -807,7 +806,7 @@ function QueueRow({
   )
 }
 
-// ── Main Dashboard ─────────────────────────────────────────────────────────
+// â”€â”€ Main Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function ShopDashboard() {
   const router = useRouter()
@@ -822,11 +821,6 @@ export default function ShopDashboard() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null)
 
-  // Today's tasks
-  const [taskProjects, setTaskProjects] = useState<ShopTaskProject[]>([])
-  const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null)
-  const [openTouchups, setOpenTouchups] = useState<Touchup[]>([])
-
   // Design meeting requests
   const [meetingRequests, setMeetingRequests] = useState<Project[]>([])
   const [meetingsCollapsed, setMeetingsCollapsed] = useState(true)
@@ -839,16 +833,12 @@ export default function ShopDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [allProjects, allQuestions, tasks, touchups, requests] = await Promise.all([
+      const [allProjects, allQuestions, requests] = await Promise.all([
         getProjects(),
         getUnresolvedQuestionsAllProjects().catch(() => [] as OpenQuestion[]),
-        getShopTaskProjects().catch(() => [] as ShopTaskProject[]),
-        getOpenTouchups().catch(() => [] as Touchup[]),
         getPendingDesignMeetingRequests().catch(() => [] as Project[]),
       ])
       setPendingQuestions(allQuestions)
-      setTaskProjects(tasks)
-      setOpenTouchups(touchups)
       setMeetingRequests(requests)
 
       const active = allProjects.filter(
@@ -867,7 +857,7 @@ export default function ShopDashboard() {
         const nextStep = currentStep
           ? steps.find(s => !s.completed && !s.is_current && (s.sequence_order ?? 0) > (currentStep.sequence_order ?? 0)) ?? null
           : steps.find(s => !s.completed) ?? null
-        const inQueue = currentStep?.step_name === 'Ready for Production — In Queue'
+        const inQueue = currentStep?.step_name === 'Ready for Production â€” In Queue'
         return {
           ...p,
           steps,
@@ -909,7 +899,7 @@ export default function ShopDashboard() {
   }
 
   async function handleStartProduction(p: EnrichedProject) {
-    const queueStep = p.steps.find(s => s.step_name === 'Ready for Production — In Queue')
+    const queueStep = p.steps.find(s => s.step_name === 'Ready for Production â€” In Queue')
     const productionStep = p.steps.find(s => s.step_name === 'Production Started')
     const { updateStep } = await import('@/lib/api/supabase-client')
     if (queueStep) await updateStep(queueStep.id, { completed: true, is_current: false })
@@ -918,7 +908,7 @@ export default function ShopDashboard() {
     router.refresh()
   }
 
-  // ── Drag handlers ──────────────────────────────────────────────────────
+  // â”€â”€ Drag handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function handleDragStart(section: 'production' | 'queue', id: string) {
     dragId.current = id
@@ -972,7 +962,7 @@ export default function ShopDashboard() {
   return (
     <div className="flex gap-5 items-start">
 
-      {/* ── LEFT PANEL: Project Tiles (65%) ── */}
+      {/* â”€â”€ LEFT PANEL: Project Tiles (65%) â”€â”€ */}
       <div className="flex-1 min-w-0 space-y-6">
 
         {/* Header */}
@@ -981,11 +971,11 @@ export default function ShopDashboard() {
           <div className="flex items-center gap-3">
             <Link href="/dashboard/shop/tasks"
               className="text-sm bg-blue-100 hover:bg-blue-700 text-blue-700 px-4 py-2 rounded-lg transition-colors font-medium">
-              ✓ Tasks
+              âœ“ Tasks
             </Link>
             <Link href="/dashboard/shop/shopping-list"
               className="text-sm bg-emerald-100 hover:bg-emerald-700 text-emerald-700 px-4 py-2 rounded-lg transition-colors font-medium">
-              🛒 Shopping List
+              ðŸ›’ Shopping List
             </Link>
           </div>
         </div>
@@ -995,7 +985,7 @@ export default function ShopDashboard() {
           <div className="bg-blue-50/40 border border-blue-200 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-blue-200/60">
               <div className="flex items-center gap-2">
-                <span className="text-blue-600 font-semibold text-sm">📐 Design Meetings Needed</span>
+                <span className="text-blue-600 font-semibold text-sm">ðŸ“ Design Meetings Needed</span>
                 <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{meetingRequests.length}</span>
               </div>
               <button onClick={() => setMeetingsCollapsed(v => !v)} className="text-blue-600 hover:text-blue-600 text-xs">
@@ -1008,7 +998,7 @@ export default function ShopDashboard() {
                   <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-blue-700 truncate">
-                        {p.customer?.name ?? 'Unknown'} — <span className="capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'Project'}</span>
+                        {p.customer?.name ?? 'Unknown'} â€” <span className="capitalize">{p.project_type?.replace(/_/g, ' ') ?? 'Project'}</span>
                       </p>
                       <p className="text-[10px] text-blue-600/70">Requested {new Date(p.updated_at).toLocaleDateString()}</p>
                     </div>
@@ -1030,7 +1020,7 @@ export default function ShopDashboard() {
           <div className="bg-orange-50/40 border border-orange-200 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-orange-200/60">
               <div className="flex items-center gap-2">
-                <span className="text-orange-600 font-semibold text-sm">⚠ Pending Questions</span>
+                <span className="text-orange-600 font-semibold text-sm">âš  Pending Questions</span>
                 <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">{pendingQuestions.length}</span>
               </div>
               <button onClick={() => setQuestionsCollapsed(v => !v)} className="text-orange-600 hover:text-orange-600 text-xs">
@@ -1041,12 +1031,12 @@ export default function ShopDashboard() {
               <div className="divide-y divide-orange-200/40">
                 {Array.from(qByProject.entries()).map(([pid, qs]) => {
                   const proj = projects.find(p => p.id === pid)
-                  const label = proj ? `${proj.customer?.name ?? 'Unknown'} — ${proj.project_type?.replace(/_/g, ' ') ?? 'Project'}` : 'Unknown Project'
+                  const label = proj ? `${proj.customer?.name ?? 'Unknown'} â€” ${proj.project_type?.replace(/_/g, ' ') ?? 'Project'}` : 'Unknown Project'
                   return (
                     <div key={pid} className="px-4 py-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium text-orange-700">{label}</span>
-                        <Link href={`/dashboard/projects/${pid}?view=shop`} className="text-xs text-blue-600 hover:text-blue-500">Go →</Link>
+                        <Link href={`/dashboard/projects/${pid}?view=shop`} className="text-xs text-blue-600 hover:text-blue-500">Go â†’</Link>
                       </div>
                       <div className="space-y-0.5">
                         {qs.map(q => (
@@ -1064,7 +1054,7 @@ export default function ShopDashboard() {
           </div>
         )}
 
-        {/* In Production — 3-column tile grid */}
+        {/* In Production â€” 3-column tile grid */}
         {inProduction.length > 0 && (
           <div>
             <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -1114,11 +1104,11 @@ export default function ShopDashboard() {
           </div>
         )}
 
-        {/* Up Next — In Queue */}
+        {/* Up Next â€” In Queue */}
         {inQueue.length > 0 && (
           <div>
             <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-              Up Next — In Queue
+              Up Next â€” In Queue
               <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{inQueue.length}</span>
             </h2>
             <div className="space-y-2">
@@ -1145,7 +1135,7 @@ export default function ShopDashboard() {
         )}
       </div>
 
-      {/* ── RIGHT PANEL: Calendar + Tasks + Shopping List (35%) — sticky ── */}
+      {/* â”€â”€ RIGHT PANEL: Calendar + Tasks + Shopping List (35%) â€” sticky â”€â”€ */}
       <div className="w-80 xl:w-96 shrink-0 sticky top-6 space-y-4 max-h-[calc(100vh-80px)] overflow-y-auto">
 
         {/* Calendar section (~50%) */}
@@ -1166,14 +1156,14 @@ export default function ShopDashboard() {
               await deleteCalendarEvent(id).catch(console.error)
               setEvents(prev => prev.filter(e => e.id !== id))
             }}
-            projectNames={new Map(projects.map(p => [p.id, `${p.customer?.name ?? 'Unknown'} — ${p.project_type?.replace(/_/g, ' ') ?? 'Project'}`]))}
+            projectNames={new Map(projects.map(p => [p.id, `${p.customer?.name ?? 'Unknown'} â€” ${p.project_type?.replace(/_/g, ' ') ?? 'Project'}`]))}
           />
           {events.length > 0 && (
             <div className="mt-2 space-y-1">
               {events.slice(0, 4).map(ev => (
                 <div key={ev.id} className="flex items-center gap-2 text-xs">
                   <span className="text-gray-500 shrink-0 w-10">{ev.event_date.slice(5).replace('-', '/')}</span>
-                  <span className="text-gray-700 truncate flex-1">{ev.title}{ev.event_time ? ` — ${formatEventTime(ev.event_time)}` : ''}</span>
+                  <span className="text-gray-700 truncate flex-1">{ev.title}{ev.event_time ? ` â€” ${formatEventTime(ev.event_time)}` : ''}</span>
                 </div>
               ))}
               {events.length > 4 && <p className="text-[10px] text-gray-400">+{events.length - 4} more this month</p>}
@@ -1181,148 +1171,13 @@ export default function ShopDashboard() {
           )}
         </div>
 
-        {/* Today's Tasks section — actionable items only */}
-        {(() => {
-          const missingInfo = projects
-            .map(p => ({ p, alerts: getMissingInfoAlerts(p) }))
-            .filter(x => x.alerts.length > 0)
-          const urgentTouchups = openTouchups.filter(t => t.priority === 'urgent')
-          const openSubtaskItems = taskProjects.flatMap(t =>
-            t.subtasks.map(st => ({ t, st }))
-          )
-          const totalItems =
-            openSubtaskItems.length +
-            pendingQuestions.length +
-            missingInfo.reduce((s, x) => s + x.alerts.length, 0) +
-            urgentTouchups.length
-
-          async function handleCompleteSubtask(subtaskId: string, stepId: string) {
-            setCompletingSubtaskId(subtaskId)
-            try {
-              await updateSubtask(subtaskId, { completed: true })
-              setTaskProjects(prev => prev.map(t =>
-                t.currentStep.id === stepId
-                  ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subtaskId), openSubtasks: t.openSubtasks - 1 }
-                  : t
-              ))
-            } finally { setCompletingSubtaskId(null) }
-          }
-
-          function projectLabelFor(p: Project): string {
-            return `${p.customer?.name ?? 'Unknown'}${p.project_type ? ' — ' + p.project_type.replace(/_/g, ' ') : ''}`
-          }
-
-          return (
-            <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-gray-800">
-                  Today&apos;s Tasks
-                  {totalItems > 0 && <span className="ml-1.5 text-xs text-gray-500">({totalItems})</span>}
-                </h2>
-                <Link href="/dashboard/shop/tasks" className="text-xs text-blue-600 hover:text-blue-500">See all →</Link>
-              </div>
-
-              {totalItems === 0 ? (
-                <p className="text-xs text-gray-400 py-2">All clear — no open action items.</p>
-              ) : (
-                <div className="space-y-3">
-                  {/* Open sub-tasks */}
-                  {openSubtaskItems.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Sub-Tasks</span>
-                      </div>
-                      <div className="space-y-0.5">
-                        {openSubtaskItems.map(({ t, st }) => (
-                          <div key={st.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 group">
-                            <input
-                              type="checkbox"
-                              checked={false}
-                              disabled={completingSubtaskId === st.id}
-                              onChange={() => handleCompleteSubtask(st.id, t.currentStep.id)}
-                              className="mt-0.5 w-3 h-3 rounded border-gray-300 bg-gray-100 accent-emerald-500 cursor-pointer shrink-0"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className={`text-xs font-medium text-gray-900 truncate ${completingSubtaskId === st.id ? 'opacity-50' : ''}`}>{st.description}</p>
-                              <p className="text-[10px] text-gray-500 truncate">{projectLabelFor(t.project)}</p>
-                            </div>
-                            <Link href={`/dashboard/projects/${t.project.id}?view=shop`}
-                              className="text-gray-400 hover:text-blue-600 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</Link>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Unresolved open questions */}
-                  {pendingQuestions.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Open Questions</span>
-                      </div>
-                      <div className="space-y-0.5">
-                        {pendingQuestions.map(q => (
-                          <div key={q.id} className="px-2 py-1.5 rounded-lg hover:bg-blue-50">
-                            <div className="flex items-start gap-2">
-                              <span className={`shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded uppercase ${q.directed_at === 'customer' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'}`}>{q.directed_at}</span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs text-gray-900">{q.question}</p>
-                                <p className="text-[10px] text-gray-500 truncate">{q.project ? projectLabelFor(q.project) : 'Unknown Project'}</p>
-                              </div>
-                              <Link href={`/dashboard/projects/${q.project_id}?view=shop`}
-                                className="text-gray-400 hover:text-blue-600 text-xs shrink-0">→</Link>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Missing critical info */}
-                  {missingInfo.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Missing Info</span>
-                      </div>
-                      <div className="space-y-0.5">
-                        {missingInfo.flatMap(({ p, alerts }) => alerts.map(label => (
-                          <Link key={`${p.id}-${label}`} href={`/dashboard/projects/${p.id}?view=shop`}
-                            className="block px-2 py-1.5 rounded-lg hover:bg-blue-50 text-xs text-red-600">
-                            ⚠ {p.customer?.name ?? 'Unknown'} — Missing: {label}
-                          </Link>
-                        )))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Urgent touch-ups */}
-                  {urgentTouchups.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Urgent Touch-Ups</span>
-                      </div>
-                      <div className="space-y-0.5">
-                        {urgentTouchups.map(t => (
-                          <div key={t.id} className="px-2 py-1.5 rounded-lg hover:bg-blue-50">
-                            <p className="text-xs font-medium text-gray-900 truncate">{t.description}</p>
-                            <p className="text-[10px] text-gray-500">
-                              {t.assigned_to ? `→ ${t.assigned_to} · ` : ''}{daysSince(t.created_at)}d old
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
+        {/* Shop Funnel — workflow tasks owned by Shop */}
+        <div className="bg-white shadow-sm border border-gray-200 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-800">Shop Funnel</h2>
+          </div>
+          <FunnelDashboard ownedBy="shop" />
+        </div>
         {/* Shopping List section (~20%, collapsed by default) */}
         <ShoppingListPanel projects={projects} />
       </div>
